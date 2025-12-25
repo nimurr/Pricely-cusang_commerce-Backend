@@ -5,6 +5,7 @@ const userRoute = require("./user.routes");
 const docsRoute = require("./docs.routes");
 const analysisHistoryRoute = require("./analysisHistoryRoute.routes");
 const webhookRoute = require("./webhook.routes");
+const feedbackRoute = require("./feedback.routes");
 
 const router = express.Router();
 
@@ -18,13 +19,27 @@ const defaultRoutes = [
     route: userRoute,
   },
   {
-    path: "/analysis-history",
-    route: analysisHistoryRoute,
-  },
-  {
-    path: "/checkout",
-    route: webhookRoute,
+    path: "/feedback",
+    route: feedbackRoute,
   }
+
+
+
+
+
+
+
+
+
+
+  // {
+  //   path: "/analysis-history",
+  //   route: analysisHistoryRoute,
+  // },
+  // {
+  //   path: "/checkout",
+  //   route: webhookRoute,
+  // }
 
 ];
 

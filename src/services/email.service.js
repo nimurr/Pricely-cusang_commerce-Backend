@@ -93,10 +93,20 @@ If you did not create an account, then ignore this email.`;
   await sendEmail(to, subject, text);
 };
 
+const sendFeedbackEmail = async (to, title, message) => {
+  const html = `
+    <h1>New Feedback Received</h1>
+    <p>${title}</p> 
+    <p>${message}</p>
+  `;
+  await sendEmail(to, `Feedback: ${title}`, html);
+}
+
 module.exports = {
   transport,
   sendEmail,
   sendResetPasswordEmail,
   sendVerificationEmail,
   sendEmailVerification,
+  sendFeedbackEmail
 };
