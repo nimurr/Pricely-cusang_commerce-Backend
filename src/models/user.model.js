@@ -63,7 +63,7 @@ const userSchema = mongoose.Schema(
       default: null
     },
     phoneNumber: {
-      type: Number,
+      type: String,
       required: false,
       default: null
     },
