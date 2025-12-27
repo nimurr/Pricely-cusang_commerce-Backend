@@ -1,18 +1,44 @@
 const { Product } = require("../models");
+const keepaService = require("./keepa.service");
 
 const createProduct = async (productUrl) => {
-    // const product = { id: Date.now(), url: productUrl };
-    const product = { url: productUrl, product: { name: "Sample Product", price: 99.99 } };
+    if (!productUrl) throw new Error("Product URL is required");
 
-    const savedProduct = await Product.create(product);
+    const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})/);
+    if (!asinMatch) throw new Error("Invalid Amazon product URL");
 
-    return savedProduct;
-}
+    const asin = asinMatch[1];
+
+    // Fetch from Keepa
+    const keepaResponse = await keepaService.fetchProductData(asin);
+
+
+    if (!keepaResponse.products || !keepaResponse.products.length) {
+        throw new Error("Keepa returned no product data");
+    }
+
+    const product = keepaResponse.products[0];
+    const productData = {
+        url: productUrl,
+        product: {
+            asin: product.asin,
+            title: product.title,
+            brand: product.brand,
+            currentPrice: product.currentPrice,
+            buyBoxPrice: product.buyBoxPrice,
+        }
+    }
+    console.log(product)
+    // Save to DB
+
+    const savedProduct = await Product.create(productData);
+
+    return product;
+};
 
 const getProducts = async () => {
-    // Logic to get all products
-    return [];
-}
+    return await Product.find().sort({ createdAt: -1 });
+};
 
 module.exports = {
     createProduct,

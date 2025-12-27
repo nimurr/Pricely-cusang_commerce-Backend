@@ -25,6 +25,7 @@ const envVarsSchema = Joi.object()
     EMAIL_FROM: Joi.string().description('the from field in the emails sent by the app'),
     STRIPE_SECRET_KEY: Joi.string().required().description('Stripe secret key'),
     STRIPE_WEBHOOK_SECRET: Joi.string().required().description('Stripe webhook secret'),
+    KEEPA_API_KEY: Joi.string().required().description('Keepa API Key'),
   })
   .unknown();
 
@@ -52,6 +53,7 @@ module.exports = {
     resetPasswordExpirationMinutes: envVars.JWT_RESET_PASSWORD_EXPIRATION_MINUTES,
     verifyEmailExpirationMinutes: envVars.JWT_VERIFY_EMAIL_EXPIRATION_MINUTES,
   },
+  KEEPA_API_KEY: envVars.KEEPA_API_KEY,
   email: {
     smtp: {
       host: envVars.SMTP_HOST,
