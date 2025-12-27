@@ -18,7 +18,7 @@ const createProduct = catchAsync(async (req, res) => {
     const product = await productService.createProduct(productUrl);
     res.status(201).json(
         response({
-            message: "Product created successfully",
+            message: "Product Added successfully",
             status: "OK",
             statusCode: httpStatus.CREATED,
             data: product,
