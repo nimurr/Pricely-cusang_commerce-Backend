@@ -6,6 +6,7 @@ const docsRoute = require("./docs.routes");
 const analysisHistoryRoute = require("./analysisHistoryRoute.routes");
 const webhookRoute = require("./webhook.routes");
 const feedbackRoute = require("./feedback.routes");
+const productRoute = require("./product.routes");
 
 const router = express.Router();
 
@@ -21,6 +22,10 @@ const defaultRoutes = [
   {
     path: "/feedback",
     route: feedbackRoute,
+  },
+  {
+    path: "/products",
+    route: productRoute,
   }
 
 
