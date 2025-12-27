@@ -9,3 +9,5 @@ module.exports.PrivacyPolicy = require('./privacyPolicy.model');
 module.exports.Support = require('./support.model');
 module.exports.AnalysisHistory = require('./analysisHistory.model');
 module.exports.Transition = require('./transition.model');
+
+module.exports.Product = require('./product.model');

@@ -2,6 +2,7 @@ module.exports.analysisHistoryController = require('./analysisHistoryRoute.contr
 module.exports.authController = require('./auth.controller');
 module.exports.userController = require('./user.controller');
 module.exports.feedbackController = require('./feedback.controller');
+module.exports.productController = require('./product.controller');
 
 
 

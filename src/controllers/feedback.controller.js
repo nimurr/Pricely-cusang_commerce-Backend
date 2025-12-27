@@ -1,8 +1,9 @@
 const httpStatus = require("http-status");
 const { feedbackService } = require("../services");
 const response = require("../config/response");
+const catchAsync = require("../utils/catchAsync");
 
-const createFeedback = (req, res) => {
+const createFeedback = catchAsync(async (req, res) => {
     const feedbackData = req.body;
     if (!feedbackData.title || !feedbackData.message) {
         return res.status(httpStatus.BAD_REQUEST).json(
@@ -24,7 +25,7 @@ const createFeedback = (req, res) => {
             data: createdFeedback,
         })
     );
-}
+})
 module.exports = {
     createFeedback,
 };
