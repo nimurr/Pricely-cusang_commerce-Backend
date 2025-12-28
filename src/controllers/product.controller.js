@@ -15,7 +15,7 @@ const createProduct = catchAsync(async (req, res) => {
             })
         );
     }
-    const product = await productService.createProduct(productUrl);
+    const product = await productService.createProduct({ productUrl, userId: req.user.id });
     res.status(201).json(
         response({
             message: "Product Added successfully",
@@ -39,7 +39,52 @@ const getProducts = catchAsync(async (req, res) => {
     );
 });
 
+const getHistory = catchAsync(async (req, res) => {
+    const history = await productService.getHistory(req.user.id);
+    if (!history || history.length === 0) {
+        return res.status(404).json(
+            response({
+                message: "Product history not found",
+                status: "NOT_FOUND",
+                statusCode: httpStatus.NOT_FOUND,
+            })
+        );
+    }
+
+    res.status(200).json(
+        response({
+            message: "Product history retrieved successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            data: history,
+        })
+    );
+});
+
+const getProductById = catchAsync(async (req, res) => {
+    const product = await productService.getProductById(req.params.id);
+    if (!product) {
+        return res.status(404).json(
+            response({
+                message: "Product not found",
+                status: "NOT_FOUND",
+                statusCode: httpStatus.NOT_FOUND,
+            })
+        );
+    }
+    res.status(200).json(
+        response({
+            message: "Product retrieved successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            data: product,
+        })
+    );
+});
+
 module.exports = {
     createProduct,
     getProducts,
+    getHistory,
+    getProductById
 };  

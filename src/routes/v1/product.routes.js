@@ -12,4 +12,12 @@ router.post("/",
     // productValidation.createProduct,
     productController.createProduct);
 
+router.get("/history",
+    auth("user"),
+    productController.getHistory);
+
+router.get("/:id",
+    auth("user"),
+    productController.getProductById);
+
 module.exports = router;
