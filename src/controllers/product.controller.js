@@ -2,7 +2,7 @@ const httpStatus = require("http-status");
 const response = require("../config/response");
 const catchAsync = require("../utils/catchAsync");
 const { productService } = require("../services");
-const cron = require('node-cron');
+
 
 
 
@@ -105,11 +105,6 @@ const deleteProductById = catchAsync(async (req, res) => {
     );
 });
 
-
-cron.schedule('0 0 0,12 * * *', () => {
-    const time = new Date();
-    console.log('Running cron job at: ' + time);
-});
 
 
 
