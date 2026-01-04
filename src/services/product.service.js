@@ -3,6 +3,7 @@ const { Product } = require("../models");
 const { sendEmail } = require("./email.service");
 const keepaService = require("./keepa.service");
 const cron = require('node-cron');
+const sendPushNotification = require("../middlewares/sendPushNotification");
 
 // --- Product functions ---
 const createProduct = async ({ productUrl, userId }) => {
@@ -135,110 +136,143 @@ const deleteHistoryById = async (id) => {
 
 // --- Cron job: Run every 12 hours (12 AM & 12 PM) ---
 // cron.schedule('*/10 * * * * *',
-cron.schedule('0 0 0,12 * * *',
-    async () => {
-        const time = new Date();
-        console.log('Running cron job at:', time.toLocaleString());
+// cron.schedule('0 0 0,12 * * *',
+//     async () => {
+//         const time = new Date();
+//         console.log('Running cron job at:', time.toLocaleString());
 
-        try {
-            const products = await Product.find({ isDelete: false }).populate('userId', 'email');
+//         try {
+//             const products = await Product.find({ isDelete: false }).populate('userId', 'email');
 
-            for (const product of products) {
-                const user = product.userId;
+//             for (const product of products) {
+//                 const user = product.userId;
 
-                // Skip if no user or email
-                if (!user || !user.email) {
-                    console.warn(`Skipping product ${product._id}: no user email`);
-                    continue;
-                }
+//                 // Skip if no user or email
+//                 if (!user || !user.email) {
+//                     console.warn(`Skipping product ${product._id}: no user email`);
+//                     continue;
+//                 }
 
-                console.log('Processing product for:', user.email);
+//                 console.log('Processing product for:', user.email);
 
-                // Keepa API call with rate-limit handling
-                try {
-                    const keepaResponse = await keepaService.fetchProductData(product.product.asin);
+//                 // Keepa API call with rate-limit handling
+//                 try {
+//                     const keepaResponse = await keepaService.fetchProductData(product.product.asin);
 
-                    if (!keepaResponse.products || !keepaResponse.products.length) {
-                        console.warn(`No Keepa data for ASIN: ${product.product.asin}`);
-                        continue;
-                    }
+//                     if (!keepaResponse.products || !keepaResponse.products.length) {
+//                         console.warn(`No Keepa data for ASIN: ${product.product.asin}`);
+//                         continue;
+//                     }
 
-                    const latest = keepaResponse.products[0];
+//                     const latest = keepaResponse.products[0];
 
-                    // Update product stats in DB
-                    product.product.price = latest?.stats.current[0] / 100 || product.product.price;
-                    product.product.lastFivePrices.avg = latest?.stats.avg[0] / 100 || product.product.lastFivePrices.avg;
-                    product.product.lastFivePrices.avg30 = latest?.stats.avg30[0] / 100 || product.product.lastFivePrices.avg30;
-                    product.product.lastFivePrices.avg90 = latest?.stats.avg90[0] / 100 || product.product.lastFivePrices.avg90;
-                    product.product.lastFivePrices.avg180 = latest?.stats.avg180[0] / 100 || product.product.lastFivePrices.avg180;
-                    product.product.lastFivePrices.avg365 = latest?.stats.avg365[0] / 100 || product.product.lastFivePrices.avg365;
+//                     // Update product stats in DB
+//                     product.product.price = latest?.stats.current[0] / 100 || product.product.price;
+//                     product.product.lastFivePrices.day5 = latest?.stats.day5[0] / 100 || product.product.lastFivePrices.day5;
+//                     product.product.lastFivePrices.day4 = latest?.stats.day4[0] / 100 || product.product.lastFivePrices.day4;
+//                     product.product.lastFivePrices.day3 = latest?.stats.day3[0] / 100 || product.product.lastFivePrices.day3;
+//                     product.product.lastFivePrices.day2 = latest?.stats.day2[0] / 100 || product.product.lastFivePrices.day2;
+//                     product.product.lastFivePrices.day1 = latest?.stats.day1[0] / 100 || product.product.lastFivePrices.day1;
 
-                    await product.save();
+//                     await product.save();
 
-                    // Build email content
-                    const emailText = `
-                        Hello,
+//                     // Build email content
+//                     const emailText = `
+//                         Hello,
 
-                        Here is the latest update for your product:
-                          <br />
-                        <br />
+//                         Here is the latest update for your product:
+//                           <br />
+//                         <br />
 
-                        Title: ${product.product.title}
-                        ASIN: ${product.product.asin}
-                          <br />
-                          <br />
-                        Current Price: $${product.product.price.toFixed(2)}
+//                         Title: ${product.product.title}
+//                         ASIN: ${product.product.asin}
+//                           <br />
+//                           <br />
+//                         Current Price: $${product.product.price.toFixed(2)}
 
-                        <br />
-                        <br />
+//                         <br />
+//                         <br />
 
-                        Average prices:
-                          <br />
-                        $${product.product.lastFivePrices.avg.toFixed(2)}  <br />
-                      $${product.product.lastFivePrices.avg30.toFixed(2)}  <br />
-                        $${product.product.lastFivePrices.avg90.toFixed(2)}  <br />
-                         $${product.product.lastFivePrices.avg180.toFixed(2)}  <br />
-                         $${product.product.lastFivePrices.avg365.toFixed(2)}  <br />
+//                         Average prices:
+//                           <br />
+//                         $${product.product.lastFivePrices.day5.toFixed(2)}  <br />
+//                       $${product.product.lastFivePrices.day4.toFixed(2)}  <br />
+//                         $${product.product.lastFivePrices.day3.toFixed(2)}  <br />
+//                          $${product.product.lastFivePrices.day2.toFixed(2)}  <br />
+//                          $${product.product.lastFivePrices.day1.toFixed(2)}  <br />
 
-                        <br />
-                        <br />
+//                         <br />
+//                         <br />
 
-                        Product URL: ${product.url}
-                          <br />
-                        <br />
+//                         Product URL: ${product.url}
+//                           <br />
+//                         <br />
 
-                        Regards,<br />
-                        Your Product Tracker
-                    `;
+//                         Regards,<br />
+//                         Your Product Tracker
+//                     `;
 
-                    const emailSubject = `Product Update: ${product.product.title}`;
-                    const to = user.email;
-                    const text = emailText;
-                    // Send email
-                    await sendEmail(
-                        to,
-                        emailSubject,
-                        text
-                    );
+//                     const emailSubject = `Product Update: ${product.product.title}`;
+//                     const to = user.email;
+//                     const text = emailText;
+//                     // Send email
+//                     await sendEmail(
+//                         to,
+//                         emailSubject,
+//                         text
+//                     );
 
-                    await new Promise(resolve => setTimeout(resolve, 1500));
+//                     await new Promise(resolve => setTimeout(resolve, 1500));
 
-                } catch (err) {
-                    if (err.response?.status === 429) {
-                        console.warn(`Keepa rate limit reached for ASIN: ${product.product.asin}, skipping this product`);
-                        continue; // skip this product
-                    }
-                    console.error(`Error fetching Keepa data for ASIN: ${product.product.asin}`, err);
-                }
-            }
+//                 } catch (err) {
+//                     if (err.response?.status === 429) {
+//                         console.warn(`Keepa rate limit reached for ASIN: ${product.product.asin}, skipping this product`);
+//                         continue; // skip this product
+//                     }
+//                     console.error(`Error fetching Keepa data for ASIN: ${product.product.asin}`, err);
+//                 }
+//             }
 
-            console.log('Cron job finished successfully.');
-        } catch (err) {
-            console.error('Cron job failed:', err);
-        }
-    }, {
-    timezone: 'Asia/Bangkok' // adjust to your timezone
-});
+//             console.log('Cron job finished successfully.');
+//         } catch (err) {
+//             console.error('Cron job failed:', err);
+//         }
+//     }, {
+//     timezone: 'Asia/Bangkok' // adjust to your timezone
+// });
+
+
+// for push notification with cron firebase 
+
+cron.schedule('0 0 0,12 * * *', async () => {
+    const products = await Product.find({ isDelete: false }).populate('userId', 'email fcmTokens');
+
+    for (const product of products) {
+        if (!product.userId) continue;
+
+        // Fetch latest Keepa data
+        const keepaResponse = await keepaService.fetchProductData(product.product.asin);
+        if (!keepaResponse.products || !keepaResponse.products.length) continue;
+
+        const latest = keepaResponse.products[0];
+        product.product.price = latest?.stats.current[0] / 100 || product.product.price;
+
+        product.product.price = latest?.stats.current[0] / 100 || product.product.price;
+        product.product.lastFivePrices.day5 = latest?.stats.avg[0] / 100 || product.product.lastFivePrices.day5;
+        product.product.lastFivePrices.day4 = latest?.stats.avg30[0] / 100 || product.product.lastFivePrices.day4;
+        product.product.lastFivePrices.day3 = latest?.stats.avg90[0] / 100|| product.product.lastFivePrices.day3;
+        product.product.lastFivePrices.day2 = latest?.stats.avg180[0] / 100 || product.product.lastFivePrices.day2;
+        product.product.lastFivePrices.day1 = latest?.stats.avg365[0] / 100 || product.product.lastFivePrices.day1;
+
+        await product.save();
+        // Send push notification
+        const title = `Price Update: ${product.product.title}`;
+        const body = `Current price: $${product.product.price.toFixed(2)}`;
+ 
+        await sendPushNotification(product.userId.fcmToken, title, body, { product: product.product.title, price: product.product.price.toFixed(2), image: product.product.images[0] });
+    }
+}, { timezone: 'Asia/Bangkok' });
+
 
 module.exports = {
     createProduct,
