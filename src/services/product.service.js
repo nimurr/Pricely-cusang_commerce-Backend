@@ -27,6 +27,9 @@ const createProduct = async ({ productUrl, userId }) => {
         throw new Error("Keepa returned no product data");
     }
 
+
+
+
     const product = keepaResponse.products[0];
     const productData = {
         userId: userId,
@@ -40,6 +43,13 @@ const createProduct = async ({ productUrl, userId }) => {
             imageBaseURL: "https://m.media-amazon.com/images/I/",
             features: product.features,
             price: product?.stats.current[1] / 100,
+            lastFiveDays: {
+                avg: product?.stats.current[4] / 100,
+                avg30: product?.stats.current[4] / 100,
+                avg90: product?.stats.current[4] / 100,
+                avg180: product?.stats.current[4] / 100,
+                avg365: product?.stats.current[4] / 100,
+            },
         }
     }
     // Save to DB
