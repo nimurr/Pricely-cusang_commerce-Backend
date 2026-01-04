@@ -105,6 +105,27 @@ const deleteProductById = catchAsync(async (req, res) => {
     );
 });
 
+const deleteHistoryById = catchAsync(async (req, res) => {
+    const product = await productService.deleteHistoryById(req.params.id);
+    if (!product) {
+        return res.status(404).json(
+            response({
+                message: "Product not found",
+                status: "NOT_FOUND",
+                statusCode: httpStatus.NOT_FOUND,
+            })
+        );
+    }
+    res.status(200).json(
+        response({
+            message: "Product deleted successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            // data: product,
+        })
+    );
+});
+
 
 
 
@@ -113,5 +134,6 @@ module.exports = {
     getProducts,
     getHistory,
     getProductById,
-    deleteProductById
+    deleteProductById,
+    deleteHistoryById
 };  

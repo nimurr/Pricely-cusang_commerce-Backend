@@ -69,13 +69,13 @@ const createProduct = async ({ productUrl, userId }) => {
             images: product.images,
             imageBaseURL: "https://m.media-amazon.com/images/I/",
             features: product.features,
-            price: product?.stats.current[0] / 100,
-            lastFiveDays: {
-                avg: product?.stats.avg[0] / 100,
-                avg30: product?.stats.avg30[0] / 100,
-                avg90: product?.stats.avg90[0] / 100,
-                avg180: product?.stats.avg180[0] / 100,
-                avg365: product?.stats.avg365[0] / 100,
+            price: product?.stats.current[4] / 100,
+            lastFivePrices: {
+                day5: product?.stats.avg[0] / 100,
+                day4: product?.stats.avg30[0] / 100,
+                day3: product?.stats.avg90[0] / 100,
+                day2: product?.stats.avg180[0] / 100,
+                day1: product?.stats.avg365[0] / 100,
             }
         }
     };
@@ -89,8 +89,8 @@ const getProducts = async () => {
     // product persentage depent on last 5 days price 
     products.forEach(product => {
         const currentPrice = product.product.price;
-        const lastFiveDays = product.product.lastFiveDays;
-        const percentageChange = ((currentPrice - lastFiveDays.avg) / lastFiveDays.avg) * 100;
+        const lastFivePrices = product.product.lastFivePrices;
+        const percentageChange = ((currentPrice - lastFivePrices.day5) / lastFivePrices.day5) * 100;
         product.product.percentageChange = percentageChange.toFixed(2);
         product.save();
     })
@@ -102,8 +102,8 @@ const getHistory = async (userId) => {
     const data = await Product.find({ userId: userId, isDelete: true }).sort({ createdAt: -1 });
     data.forEach(product => {
         const currentPrice = product.product.price;
-        const lastFiveDays = product.product.lastFiveDays;
-        const percentageChange = ((currentPrice - lastFiveDays.avg) / lastFiveDays.avg) * 100;
+        const lastFivePrices = product.product.lastFivePrices;
+        const percentageChange = ((currentPrice - lastFivePrices.day5) / lastFivePrices.day5) * 100;
         product.product.percentageChange = percentageChange.toFixed(2);
         product.save();
     })
@@ -117,8 +117,8 @@ const getProductById = async (id) => {
     }
 
     const currentPrice = product.product.price;
-    const lastFiveDays = product.product.lastFiveDays;
-    const percentageChange = ((currentPrice - lastFiveDays.avg) / lastFiveDays.avg) * 100;
+    const lastFivePrices = product.product.lastFivePrices;
+    const percentageChange = ((currentPrice - lastFivePrices.day5) / lastFivePrices.day5) * 100;
     product.product.percentageChange = percentageChange.toFixed(2);
     product.save();
 
@@ -127,6 +127,10 @@ const getProductById = async (id) => {
 
 const deleteProductById = async (id) => {
     return await Product.findByIdAndUpdate(id, { isDelete: true });
+};
+
+const deleteHistoryById = async (id) => {
+    return await Product.findByIdAndDelete(id);
 };
 
 // --- Cron job: Run every 12 hours (12 AM & 12 PM) ---
@@ -163,11 +167,11 @@ cron.schedule('0 0 0,12 * * *',
 
                     // Update product stats in DB
                     product.product.price = latest?.stats.current[0] / 100 || product.product.price;
-                    product.product.lastFiveDays.avg = latest?.stats.avg[0] / 100 || product.product.lastFiveDays.avg;
-                    product.product.lastFiveDays.avg30 = latest?.stats.avg30[0] / 100 || product.product.lastFiveDays.avg30;
-                    product.product.lastFiveDays.avg90 = latest?.stats.avg90[0] / 100 || product.product.lastFiveDays.avg90;
-                    product.product.lastFiveDays.avg180 = latest?.stats.avg180[0] / 100 || product.product.lastFiveDays.avg180;
-                    product.product.lastFiveDays.avg365 = latest?.stats.avg365[0] / 100 || product.product.lastFiveDays.avg365;
+                    product.product.lastFivePrices.avg = latest?.stats.avg[0] / 100 || product.product.lastFivePrices.avg;
+                    product.product.lastFivePrices.avg30 = latest?.stats.avg30[0] / 100 || product.product.lastFivePrices.avg30;
+                    product.product.lastFivePrices.avg90 = latest?.stats.avg90[0] / 100 || product.product.lastFivePrices.avg90;
+                    product.product.lastFivePrices.avg180 = latest?.stats.avg180[0] / 100 || product.product.lastFivePrices.avg180;
+                    product.product.lastFivePrices.avg365 = latest?.stats.avg365[0] / 100 || product.product.lastFivePrices.avg365;
 
                     await product.save();
 
@@ -190,11 +194,11 @@ cron.schedule('0 0 0,12 * * *',
 
                         Average prices:
                           <br />
-                        $${product.product.lastFiveDays.avg.toFixed(2)}  <br />
-                      $${product.product.lastFiveDays.avg30.toFixed(2)}  <br />
-                        $${product.product.lastFiveDays.avg90.toFixed(2)}  <br />
-                         $${product.product.lastFiveDays.avg180.toFixed(2)}  <br />
-                         $${product.product.lastFiveDays.avg365.toFixed(2)}  <br />
+                        $${product.product.lastFivePrices.avg.toFixed(2)}  <br />
+                      $${product.product.lastFivePrices.avg30.toFixed(2)}  <br />
+                        $${product.product.lastFivePrices.avg90.toFixed(2)}  <br />
+                         $${product.product.lastFivePrices.avg180.toFixed(2)}  <br />
+                         $${product.product.lastFivePrices.avg365.toFixed(2)}  <br />
 
                         <br />
                         <br />
@@ -241,5 +245,6 @@ module.exports = {
     getProducts,
     getHistory,
     getProductById,
-    deleteProductById
+    deleteProductById,
+    deleteHistoryById
 };

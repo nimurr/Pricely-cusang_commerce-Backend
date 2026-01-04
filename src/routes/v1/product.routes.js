@@ -24,4 +24,8 @@ router.delete("/:id",
     auth("user"),
     productController.deleteProductById);
 
+router.delete("/history/:id",
+    auth("user"),
+    productController.deleteHistoryById);
+
 module.exports = router;
