@@ -2,6 +2,8 @@ const httpStatus = require("http-status");
 const response = require("../config/response");
 const catchAsync = require("../utils/catchAsync");
 const { productService } = require("../services");
+const cron = require('node-cron');
+
 
 
 const createProduct = catchAsync(async (req, res) => {
@@ -82,9 +84,39 @@ const getProductById = catchAsync(async (req, res) => {
     );
 });
 
+const deleteProductById = catchAsync(async (req, res) => {
+    const product = await productService.deleteProductById(req.params.id);
+    if (!product) {
+        return res.status(404).json(
+            response({
+                message: "Product not found",
+                status: "NOT_FOUND",
+                statusCode: httpStatus.NOT_FOUND,
+            })
+        );
+    }
+    res.status(200).json(
+        response({
+            message: "Product deleted successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            // data: product,
+        })
+    );
+});
+
+
+cron.schedule('0 0 0,12 * * *', () => {
+    const time = new Date();
+    console.log('Running cron job at: ' + time);
+});
+
+
+
 module.exports = {
     createProduct,
     getProducts,
     getHistory,
-    getProductById
+    getProductById,
+    deleteProductById
 };  

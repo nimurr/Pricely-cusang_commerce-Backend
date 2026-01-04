@@ -44,12 +44,12 @@ const createProduct = async ({ productUrl, userId }) => {
             features: product.features,
             price: product?.stats.current[1] / 100,
             lastFiveDays: {
-                avg: product?.stats.current[4] / 100,
-                avg30: product?.stats.current[4] / 100,
-                avg90: product?.stats.current[4] / 100,
-                avg180: product?.stats.current[4] / 100,
-                avg365: product?.stats.current[4] / 100,
-            },
+                avg: product?.stats.avg[4] / 100,
+                avg30: product?.stats.avg30[4] / 100,
+                avg90: product?.stats.avg90[4] / 100,
+                avg180: product?.stats.avg180[4] / 100,
+                avg365: product?.stats.avg365[4] / 100,
+            }
         }
     }
     // Save to DB
@@ -72,59 +72,14 @@ const getProductById = async (id) => {
     return await Product.findById(id);
 };
 
+const deleteProductById = async (id) => {
+    return await Product.findByIdAndUpdate(id, { isDelete: true });
+};
+
 module.exports = {
     createProduct,
     getProducts,
     getHistory,
-    getProductById
+    getProductById,
+    deleteProductById
 };
-
-
-// const { Product } = require("../models");
-// const keepaService = require("./keepa.service");
-
-// /**
-//  * Create a product from Amazon URL using Keepa
-//  */
-// const createProduct = async (productUrl) => {
-//   if (!productUrl) throw new Error("Product URL is required");
-
-//   const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})/);
-//   if (!asinMatch) throw new Error("Invalid Amazon product URL");
-
-//   const asin = asinMatch[1];
-
-//   // Fetch product from Keepa
-//   const keepaProduct = await keepaService.fetchProductData(asin);
-
-//   const productData = {
-//     url: productUrl,
-//     product: {
-//       asin: keepaProduct.asin,
-//       title: keepaProduct.title,
-//       brand: keepaProduct.brand,
-//       features: keepaProduct.features,
-//       images: keepaProduct.images,
-//       imageBaseURL: "https://m.media-amazon.com/images/I/",
-//       price: keepaProduct.price,
-//       lastUpdate: keepaProduct.lastUpdate
-//     }
-//   };
-
-//   // Save to MongoDB
-//   const savedProduct = await Product.create(productData);
-
-//   return savedProduct;
-// };
-
-// /**
-//  * Get all products
-//  */
-// const getProducts = async () => {
-//   return await Product.find().sort({ createdAt: -1 });
-// };
-
-// module.exports = {
-//   createProduct,
-//   getProducts
-// };

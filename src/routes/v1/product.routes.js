@@ -20,4 +20,8 @@ router.get("/:id",
     auth("user"),
     productController.getProductById);
 
+router.delete("/:id",
+    auth("user"),
+    productController.deleteProductById);
+
 module.exports = router;
