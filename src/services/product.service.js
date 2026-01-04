@@ -1,3 +1,4 @@
+const { default: axios } = require("axios");
 const { Product } = require("../models");
 const { sendEmail } = require("./email.service");
 const keepaService = require("./keepa.service");
@@ -7,31 +8,58 @@ const cron = require('node-cron');
 const createProduct = async ({ productUrl, userId }) => {
     if (!productUrl) throw new Error("Product URL is required");
 
+    // Function to expand Amazon short URLs (a.co or c.co)
+    async function expandShortAmazonUrl(shortUrl) {
+        try {
+            // Follow redirects automatically to get final URL
+            const response = await axios.get(shortUrl, {
+                maxRedirects: 5,
+                validateStatus: (status) => status >= 200 && status < 400
+            });
+
+            // Final URL after redirects
+            return response.request.res.responseUrl || shortUrl;
+
+        } catch (err) {
+            throw new Error("Failed to expand short URL: " + err.message);
+        }
+    }
+
+    // Detect short Amazon URL
+    if (productUrl.includes("a.co/") || productUrl.includes("c.co/")) {
+        console.log("Short Amazon URL detected, expanding...");
+        productUrl = await expandShortAmazonUrl(productUrl);
+        console.log("Expanded URL:", productUrl);
+    }
+
+    // Extract ASIN from full URL
     const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})/);
     if (!asinMatch) throw new Error("Invalid Amazon product URL");
 
-    const existingProduct = await Product.findOne({ url: productUrl, userId: userId, isDelete: false });
+    const asin = asinMatch[1];
+
+    // Check if product already exists
+    const existingProduct = await Product.findOne({ url: productUrl, userId, isDelete: false });
     if (existingProduct) {
         throw new Error("Product already exists");
     }
 
-    const count = await Product.countDocuments({ userId: userId, isDelete: false });
+    // Limit products per user
+    const count = await Product.countDocuments({ userId, isDelete: false });
     if (count > 2) {
         throw new Error("Product limit reached. You can only add up to 3 products.");
     }
 
-    const asin = asinMatch[1];
+    // Fetch product data from Keepa
     const keepaResponse = await keepaService.fetchProductData(asin);
-
     if (!keepaResponse.products || !keepaResponse.products.length) {
         throw new Error("Keepa returned no product data");
     }
 
     const product = keepaResponse.products[0];
 
-
     const productData = {
-        userId: userId,
+        userId,
         url: productUrl,
         product: {
             asin: product.asin,
@@ -50,7 +78,7 @@ const createProduct = async ({ productUrl, userId }) => {
                 avg365: product?.stats.avg365[0] / 100,
             }
         }
-    }
+    };
 
     const savedProduct = await Product.create(productData);
     return savedProduct;
