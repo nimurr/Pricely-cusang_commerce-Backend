@@ -69,7 +69,7 @@ const createProduct = async ({ productUrl, userId }) => {
             images: product.images,
             imageBaseURL: "https://m.media-amazon.com/images/I/",
             features: product.features,
-            price: product?.stats.current[4] / 100,
+            price: product?.stats.current[0] / 100,
             lastFivePrices: {
                 day5: product?.stats.avg[0] / 100,
                 day4: product?.stats.avg30[0] / 100,
