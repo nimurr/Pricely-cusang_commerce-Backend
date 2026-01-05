@@ -26,6 +26,7 @@ const envVarsSchema = Joi.object()
     STRIPE_SECRET_KEY: Joi.string().required().description('Stripe secret key'),
     STRIPE_WEBHOOK_SECRET: Joi.string().required().description('Stripe webhook secret'),
     KEEPA_API_KEY: Joi.string().required().description('Keepa API Key'),
+    REDIS_URL: Joi.string().required().description('Redis url'),
   })
   .unknown();
 
@@ -69,4 +70,5 @@ module.exports = {
     secretKey: envVars.STRIPE_SECRET_KEY,
     webhookSecret: envVars.STRIPE_WEBHOOK_SECRET,
   },
+  redisUrl: envVars.REDIS_URL,
 };
