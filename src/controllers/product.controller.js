@@ -28,6 +28,33 @@ const createProduct = catchAsync(async (req, res) => {
     );
 });
 
+const addNote = catchAsync(async (req, res) => {
+    const { note } = req.body;
+    const id = req.params.id;
+    const product = await productService.addNote(id, note);
+    res.status(201).json(
+        response({
+            message: "Product Note Added successfully",
+            status: "OK",
+            statusCode: httpStatus.CREATED,
+            data: {},
+        })
+    );
+});
+
+const markAsPurchased = catchAsync(async (req, res) => {
+    const id = req.params.id;
+    const product = await productService.markAsPurchased(id);
+    res.status(201).json(
+        response({
+            message: "Product Marked as Purchased successfully",
+            status: "OK",
+            statusCode: httpStatus.CREATED,
+            data: {},
+        })
+    );
+});
+
 const getProducts = catchAsync(async (req, res) => {
     const products = await productService.getProducts();
 
@@ -131,6 +158,8 @@ const deleteHistoryById = catchAsync(async (req, res) => {
 
 module.exports = {
     createProduct,
+    addNote,
+    markAsPurchased,
     getProducts,
     getHistory,
     getProductById,

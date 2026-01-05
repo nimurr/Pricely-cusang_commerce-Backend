@@ -85,6 +85,24 @@ const createProduct = async ({ productUrl, userId }) => {
     return savedProduct;
 };
 
+const addNote = async (id, note) => {
+    const product = await Product.findByIdAndUpdate(id, { note });
+    if (!product) {
+        throw new Error("Product not found");
+    }
+
+    return product;
+};
+
+const markAsPurchased = async (id) => {
+    const product = await Product.findByIdAndUpdate(id, { isPurchased: true, isDelete: true });
+    if (!product) {
+        throw new Error("Product not found");
+    }
+
+    return product;
+};
+
 const getProducts = async () => {
     const products = await Product.find({ isDelete: false }).sort({ createdAt: -1 })
     // product persentage depent on last 5 days price 
@@ -100,16 +118,39 @@ const getProducts = async () => {
 };
 
 const getHistory = async (userId) => {
-    const data = await Product.find({ userId: userId, isDelete: true }).sort({ createdAt: -1 });
-    data.forEach(product => {
-        const currentPrice = product.product.price;
-        const lastFivePrices = product.product.lastFivePrices;
-        const percentageChange = ((currentPrice - lastFivePrices.day5) / lastFivePrices.day5) * 100;
-        product.product.percentageChange = percentageChange.toFixed(2);
-        product.save();
-    })
+    // Fetch all deleted products for this user
+    const products = await Product.find({ userId: userId, isDelete: true })
+        .sort({ createdAt: -1 });
+
+    let totalAmountSave = 0;
+
+    const response = products.map(product => {
+        const productObj = product.toObject();
+
+        if (product.isPurchased) {
+            const currentPrice = product.product.price;
+            const day5Price = product.product.lastFivePrices.day5 || 0;
+
+            const difference = currentPrice - day5Price;
+
+            productObj.product.saveAmount = Number(difference.toFixed(2));
+
+            totalAmountSave += difference;
+        } else {
+            productObj.product.saveAmount = 0; // not purchased
+        }
+
+        return productObj;
+    });
+
+    const data = {
+        totalDifference: Number(totalAmountSave.toFixed(2)),
+        products: response
+    };
+
     return data;
 };
+
 
 const getProductById = async (id) => {
     const product = await Product.findById(id);
@@ -276,6 +317,8 @@ const deleteHistoryById = async (id) => {
 
 module.exports = {
     createProduct,
+    addNote,
+    markAsPurchased,
     getProducts,
     getHistory,
     getProductById,
