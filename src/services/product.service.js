@@ -161,6 +161,22 @@ const getProductById = async (id) => {
     const currentPrice = product.product.price;
     const lastFivePrices = product.product.lastFivePrices;
     const percentageChange = ((currentPrice - lastFivePrices.day5) / lastFivePrices.day5) * 100;
+    product.product.productPreviousPrice = lastFivePrices.day5;
+
+    const lastFivePricesItem = [
+        product.product.lastFivePrices.day1,
+        product.product.lastFivePrices.day2,
+        product.product.lastFivePrices.day3,
+        product.product.lastFivePrices.day4,
+        product.product.lastFivePrices.day5
+    ];
+
+    // Filter out any null or undefined values just in case
+    const validPrices = lastFivePricesItem.filter(price => price != null);
+
+    // Find the minimum price
+    product.product.lowestPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
+
     product.product.percentageChange = percentageChange.toFixed(2);
     product.save();
 
