@@ -7,6 +7,7 @@ const analysisHistoryRoute = require("./analysisHistoryRoute.routes");
 const webhookRoute = require("./webhook.routes");
 const feedbackRoute = require("./feedback.routes");
 const productRoute = require("./product.routes");
+const notificationRoute = require("./notifications.routes");
 
 const router = express.Router();
 
@@ -26,8 +27,11 @@ const defaultRoutes = [
   {
     path: "/products",
     route: productRoute,
+  },
+  {
+    path: "/notifications",
+    route: notificationRoute,
   }
-
 
 
 

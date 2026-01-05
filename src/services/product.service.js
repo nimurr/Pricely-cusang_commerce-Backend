@@ -244,34 +244,34 @@ const deleteHistoryById = async (id) => {
 
 // for push notification with cron firebase 
 
-cron.schedule('0 0 0,12 * * *', async () => {
-    const products = await Product.find({ isDelete: false }).populate('userId', 'email fcmTokens');
+// cron.schedule('0 0 0,12 * * *', async () => {
+//     const products = await Product.find({ isDelete: false }).populate('userId', 'email fcmTokens');
 
-    for (const product of products) {
-        if (!product.userId) continue;
+//     for (const product of products) {
+//         if (!product.userId) continue;
 
-        // Fetch latest Keepa data
-        const keepaResponse = await keepaService.fetchProductData(product.product.asin);
-        if (!keepaResponse.products || !keepaResponse.products.length) continue;
+//         // Fetch latest Keepa data
+//         const keepaResponse = await keepaService.fetchProductData(product.product.asin);
+//         if (!keepaResponse.products || !keepaResponse.products.length) continue;
 
-        const latest = keepaResponse.products[0];
-        product.product.price = latest?.stats.current[0] / 100 || product.product.price;
+//         const latest = keepaResponse.products[0];
+//         product.product.price = latest?.stats.current[0] / 100 || product.product.price;
 
-        product.product.price = latest?.stats.current[0] / 100 || product.product.price;
-        product.product.lastFivePrices.day5 = latest?.stats.avg[0] / 100 || product.product.lastFivePrices.day5;
-        product.product.lastFivePrices.day4 = latest?.stats.avg30[0] / 100 || product.product.lastFivePrices.day4;
-        product.product.lastFivePrices.day3 = latest?.stats.avg90[0] / 100|| product.product.lastFivePrices.day3;
-        product.product.lastFivePrices.day2 = latest?.stats.avg180[0] / 100 || product.product.lastFivePrices.day2;
-        product.product.lastFivePrices.day1 = latest?.stats.avg365[0] / 100 || product.product.lastFivePrices.day1;
+//         product.product.price = latest?.stats.current[0] / 100 || product.product.price;
+//         product.product.lastFivePrices.day5 = latest?.stats.avg[0] / 100 || product.product.lastFivePrices.day5;
+//         product.product.lastFivePrices.day4 = latest?.stats.avg30[0] / 100 || product.product.lastFivePrices.day4;
+//         product.product.lastFivePrices.day3 = latest?.stats.avg90[0] / 100 || product.product.lastFivePrices.day3;
+//         product.product.lastFivePrices.day2 = latest?.stats.avg180[0] / 100 || product.product.lastFivePrices.day2;
+//         product.product.lastFivePrices.day1 = latest?.stats.avg365[0] / 100 || product.product.lastFivePrices.day1;
 
-        await product.save();
-        // Send push notification
-        const title = `Price Update: ${product.product.title}`;
-        const body = `Current price: $${product.product.price.toFixed(2)}`;
- 
-        await sendPushNotification(product.userId.fcmToken, title, body, { product: product.product.title, price: product.product.price.toFixed(2), image: product.product.images[0] });
-    }
-}, { timezone: 'Asia/Bangkok' });
+//         await product.save();
+//         // Send push notification
+//         const title = `Price Update: ${product.product.title}`;
+//         const body = `Current price: $${product.product.price.toFixed(2)}`;
+
+//         await sendPushNotification(product.userId.fcmToken, title, body, { product: product.product.title, price: product.product.price.toFixed(2), image: product.product.images[0] });
+//     }
+// }, { timezone: 'Asia/Bangkok' });
 
 
 module.exports = {

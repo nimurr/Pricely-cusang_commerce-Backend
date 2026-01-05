@@ -8,6 +8,22 @@ const notificationSchema = new Schema({
         ref: 'User',
         required: true
     },
+    role: {
+        type: String,
+        required: false,
+        enum: roles,
+        default: null,
+    },
+    products: {
+        type: Schema.Types.ObjectId,
+        ref: 'Product',
+        required: false
+    },
+    status: {
+        type: String,
+        enum: ['unread', 'read'],
+        default: 'unread'
+    },
     sendBy: {
         type: Schema.Types.ObjectId,
         ref: 'User',
@@ -18,36 +34,7 @@ const notificationSchema = new Schema({
         required: false,
         default: null
     },
-    role: {
-        type: String,
-        required: false,
-        enum: roles,
-        default: null,
-    },
-    title: {
-        type: String,
-    },
-    content: {
-        type: String,
-        required: true
-    },
-    icon: {
-        type: String,
-        required: false
-    },
-    devStatus: {
-        type: String,
-        required: false
-    },
-    image: {
-        type: String,
-        required: false
-    },
-    status: {
-        type: String,
-        enum: ['unread', 'read'],
-        default: 'unread'
-    },
+
     type: {
         type: String,
     },

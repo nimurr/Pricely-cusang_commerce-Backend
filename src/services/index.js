@@ -6,3 +6,4 @@ module.exports.analysisHistoryService = require('./analysisHistory.service');
 
 module.exports.feedbackService = require('./feedback.service');
 module.exports.productService = require('./product.service');
+module.exports.notificationsService = require('./notifications.service');
