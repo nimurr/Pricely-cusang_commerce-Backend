@@ -6,6 +6,10 @@ const productSchema = new mongoose.Schema({
     product: { type: Object, required: true },
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     isDelete: { type: Boolean, default: false },
+    note: { type: String },
+    priceDropNotify: { type: Boolean, default: false },
+    priceIncressNotify: { type: Boolean, default: false },
+    removeItemAfter30Day: { type: Boolean, default: false }
 }, { timestamps: true });
 
 const Product = mongoose.model('Product', productSchema);
