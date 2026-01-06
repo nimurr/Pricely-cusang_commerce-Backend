@@ -51,7 +51,6 @@ const getNotification = async ({ userId }) => {
 
 const readAllNotification = async ({ userId }) => {
 
-
     const notifications = await Notification.updateMany(
         { userId },
         { status: "read" }
