@@ -1,195 +1,261 @@
-const { default: axios } = require("axios");
+const axios = require("axios");
+const cron = require("node-cron");
 const { Product } = require("../models");
-const { sendEmail } = require("./email.service");
 const keepaService = require("./keepa.service");
-const cron = require('node-cron');
 const sendPushNotification = require("../middlewares/sendPushNotification");
+const { setRedis, getRedis, delRedis } = require("../utils/redisClient");
 
-// --- Product functions ---
+/* -------------------------------------------------------------------------- */
+/*                                CREATE PRODUCT                               */
+/* -------------------------------------------------------------------------- */
+
 const createProduct = async ({ productUrl, userId }) => {
     if (!productUrl) throw new Error("Product URL is required");
 
-    // Function to expand Amazon short URLs (a.co or c.co)
-    async function expandShortAmazonUrl(shortUrl) {
-        try {
-            // Follow redirects automatically to get final URL
-            const response = await axios.get(shortUrl, {
-                maxRedirects: 5,
-                validateStatus: (status) => status >= 200 && status < 400
-            });
+    // Expand Amazon short URL
+    const expandShortAmazonUrl = async (shortUrl) => {
+        const response = await axios.get(shortUrl, {
+            maxRedirects: 5,
+            validateStatus: (status) => status >= 200 && status < 400
+        });
+        return response.request.res.responseUrl || shortUrl;
+    };
 
-            // Final URL after redirects
-            return response.request.res.responseUrl || shortUrl;
-
-        } catch (err) {
-            throw new Error("Failed to expand short URL: " + err.message);
-        }
-    }
-
-    // Detect short Amazon URL
     if (productUrl.includes("a.co/") || productUrl.includes("c.co/")) {
-        console.log("Short Amazon URL detected, expanding...");
         productUrl = await expandShortAmazonUrl(productUrl);
-        console.log("Expanded URL:", productUrl);
     }
 
-    // Extract ASIN from full URL
+    // Extract ASIN
     const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})/);
     if (!asinMatch) throw new Error("Invalid Amazon product URL");
 
     const asin = asinMatch[1];
 
-    // Check if product already exists
-    const existingProduct = await Product.findOne({ url: productUrl, userId, isDelete: false });
-    if (existingProduct) {
-        throw new Error("Product already exists");
-    }
+    // Check duplicate
+    const exists = await Product.findOne({ url: productUrl, userId, isDelete: false });
+    if (exists) throw new Error("Product already exists");
 
-    // Limit products per user
+    // Limit per user
     const count = await Product.countDocuments({ userId, isDelete: false });
-    if (count > 2) {
-        throw new Error("Product limit reached. You can only add up to 3 products.");
-    }
+    if (count >= 3) throw new Error("Product limit reached");
 
-    // Fetch product data from Keepa
+    // Keepa API
     const keepaResponse = await keepaService.fetchProductData(asin);
-    if (!keepaResponse.products || !keepaResponse.products.length) {
+    if (!keepaResponse.products?.length) {
         throw new Error("Keepa returned no product data");
     }
 
-    const product = keepaResponse.products[0];
+    const kp = keepaResponse.products[0];
 
     const productData = {
         userId,
         url: productUrl,
         product: {
-            asin: product.asin,
-            title: product.title,
-            brand: product.brand,
-            description: product.description,
-            images: product.images,
+            asin: kp.asin,
+            title: kp.title,
+            brand: kp.brand,
+            description: kp.description,
+            images: kp.images,
             imageBaseURL: "https://m.media-amazon.com/images/I/",
-            features: product.features,
-            price: product?.stats.current[0] / 100,
+            features: kp.features,
+            price: kp?.stats?.current?.[0] / 100,
             lastFivePrices: {
-                day5: product?.stats.avg[0] / 100,
-                day4: product?.stats.avg30[0] / 100,
-                day3: product?.stats.avg90[0] / 100,
-                day2: product?.stats.avg180[0] / 100,
-                day1: product?.stats.avg365[0] / 100,
+                day5: kp?.stats?.avg?.[0] / 100,
+                day4: kp?.stats?.avg30?.[0] / 100,
+                day3: kp?.stats?.avg90?.[0] / 100,
+                day2: kp?.stats?.avg180?.[0] / 100,
+                day1: kp?.stats?.avg365?.[0] / 100,
             }
         }
     };
 
-    const savedProduct = await Product.create(productData);
-    return savedProduct;
+    const saved = await Product.create(productData);
+
+    // 🔥 Invalidate cache
+    await delRedis("products:all");
+    await delRedis(`history:${userId}`);
+
+    return saved;
 };
+
+/* -------------------------------------------------------------------------- */
+/*                                  ADD NOTE                                   */
+/* -------------------------------------------------------------------------- */
 
 const addNote = async (id, note) => {
-    const product = await Product.findByIdAndUpdate(id, { note });
-    if (!product) {
-        throw new Error("Product not found");
-    }
+    const product = await Product.findByIdAndUpdate(id, { note }, { new: true });
+    if (!product) throw new Error("Product not found");
+
+    await delRedis(`product:${id}`);
+    await delRedis("products:all");
 
     return product;
 };
+
+/* -------------------------------------------------------------------------- */
+/*                              MARK AS PURCHASED                              */
+/* -------------------------------------------------------------------------- */
 
 const markAsPurchased = async (id) => {
-    const product = await Product.findByIdAndUpdate(id, { isPurchased: true, isDelete: true });
-    if (!product) {
-        throw new Error("Product not found");
-    }
+    const product = await Product.findByIdAndUpdate(
+        id,
+        { isPurchased: true, isDelete: true },
+        { new: true }
+    );
+
+    if (!product) throw new Error("Product not found");
+
+    await delRedis("products:all");
+    await delRedis(`product:${id}`);
+    await delRedis(`history:${product.userId}`);
 
     return product;
 };
 
-const getProducts = async () => {
-    const products = await Product.find({ isDelete: false }).sort({ createdAt: -1 })
-    // product persentage depent on last 5 days price 
-    products.forEach(product => {
-        const currentPrice = product.product.price;
-        const lastFivePrices = product.product.lastFivePrices;
-        const percentageChange = ((currentPrice - lastFivePrices.day5) / lastFivePrices.day5) * 100;
-        product.product.percentageChange = percentageChange.toFixed(2);
-        product.save();
-    })
+/* -------------------------------------------------------------------------- */
+/*                                 GET PRODUCTS                                */
+/* -------------------------------------------------------------------------- */
 
-    return products;
+const getProducts = async () => {
+    const cacheKey = "products:all";
+
+    const cached = await getRedis(cacheKey);
+    if (cached) {
+        return cached
+    };
+
+    const products = await Product.find({ isDelete: false })
+        .sort({ createdAt: -1 })
+        .lean();
+
+    console.log(products)
+
+    const response = products.map(p => {
+        const day5 = p.product.lastFivePrices.day5;
+        const current = p.product.price;
+
+        p.product.percentageChange = day5
+            ? (((current - day5) / day5) * 100).toFixed(2)
+            : "0.00";
+
+        return p;
+    });
+
+    await setRedis(cacheKey, response, 300);
+
+    return response;
 };
 
+/* -------------------------------------------------------------------------- */
+/*                                 GET HISTORY                                 */
+/* -------------------------------------------------------------------------- */
+
 const getHistory = async (userId) => {
-    // Fetch all deleted products for this user
-    const products = await Product.find({ userId: userId, isDelete: true })
-        .sort({ createdAt: -1 });
+    const cacheKey = `history:${userId}`;
 
-    let totalAmountSave = 0;
+    const cached = await getRedis(cacheKey);
+    if (cached) return cached;
 
-    const response = products.map(product => {
-        const productObj = product.toObject();
+    const products = await Product.find({
+        userId,
+        isDelete: true
+    }).sort({ createdAt: -1 }).lean();
 
-        if (product.isPurchased) {
-            const currentPrice = product.product.price;
-            const day5Price = product.product.lastFivePrices.day5 || 0;
+    let totalDifference = 0;
 
-            const difference = currentPrice - day5Price;
-
-            productObj.product.saveAmount = Number(difference.toFixed(2));
-
-            totalAmountSave += difference;
+    const response = products.map(p => {
+        if (p.isPurchased) {
+            const diff = p.product.price - (p.product.lastFivePrices.day5 || 0);
+            p.product.saveAmount = Number(diff.toFixed(2));
+            totalDifference += diff;
         } else {
-            productObj.product.saveAmount = 0; // not purchased
+            p.product.saveAmount = 0;
         }
-
-        return productObj;
+        return p;
     });
 
     const data = {
-        totalDifference: Number(totalAmountSave.toFixed(2)),
+        totalDifference: Number(totalDifference.toFixed(2)),
         products: response
     };
+
+    await setRedis(cacheKey, data, 300);
 
     return data;
 };
 
+/* -------------------------------------------------------------------------- */
+/*                              GET PRODUCT BY ID                              */
+/* -------------------------------------------------------------------------- */
 
 const getProductById = async (id) => {
-    const product = await Product.findById(id);
-    if (!product) {
-        throw new Error("Product not found");
-    }
+    const cacheKey = `product:${id}`;
 
-    const currentPrice = product.product.price;
-    const lastFivePrices = product.product.lastFivePrices;
-    const percentageChange = ((currentPrice - lastFivePrices.day5) / lastFivePrices.day5) * 100;
-    product.product.productPreviousPrice = lastFivePrices.day5;
+    const cached = await getRedis(cacheKey);
+    if (cached) return cached;
 
-    const lastFivePricesItem = [
-        product.product.lastFivePrices.day1,
-        product.product.lastFivePrices.day2,
-        product.product.lastFivePrices.day3,
-        product.product.lastFivePrices.day4,
-        product.product.lastFivePrices.day5
-    ];
+    const product = await Product.findById(id).lean();
+    if (!product) throw new Error("Product not found");
 
-    // Filter out any null or undefined values just in case
-    const validPrices = lastFivePricesItem.filter(price => price != null);
+    const prices = Object.values(product.product.lastFivePrices)
+        .filter(p => p != null);
 
-    // Find the minimum price
-    product.product.lowestPrice = validPrices.length > 0 ? Math.min(...validPrices) : null;
+    product.product.lowestPrice =
+        prices.length ? Math.min(...prices) : null;
 
-    product.product.percentageChange = percentageChange.toFixed(2);
-    product.save();
+    await setRedis(cacheKey, product, 300);
 
     return product;
 };
 
+/* -------------------------------------------------------------------------- */
+/*                                  DELETE                                     */
+/* -------------------------------------------------------------------------- */
+
 const deleteProductById = async (id) => {
-    return await Product.findByIdAndUpdate(id, { isDelete: true });
+    const product = await Product.findByIdAndUpdate(id, { isDelete: true });
+    if (product) {
+        await delRedis("products:all");
+        await delRedis(`product:${id}`);
+        await delRedis(`history:${product.userId}`);
+    }
+    return product;
 };
 
 const deleteHistoryById = async (id) => {
     return await Product.findByIdAndDelete(id);
 };
+
+/* -------------------------------------------------------------------------- */
+/*                                   EXPORTS                                   */
+/* -------------------------------------------------------------------------- */
+
+module.exports = {
+    createProduct,
+    addNote,
+    markAsPurchased,
+    getProducts,
+    getHistory,
+    getProductById,
+    deleteProductById,
+    deleteHistoryById
+};
+
+
+
+
+module.exports = {
+    createProduct,
+    addNote,
+    markAsPurchased,
+    getProducts,
+    getHistory,
+    getProductById,
+    deleteProductById,
+    deleteHistoryById
+};
+
+
 
 // --- Cron job: Run every 12 hours (12 AM & 12 PM) ---
 // cron.schedule('*/10 * * * * *',
@@ -299,7 +365,7 @@ const deleteHistoryById = async (id) => {
 // });
 
 
-// for push notification with cron firebase 
+// for push notification with cron firebase
 
 // cron.schedule('0 0 0,12 * * *', async () => {
 //     const products = await Product.find({ isDelete: false }).populate('userId', 'email fcmTokens');
@@ -329,15 +395,3 @@ const deleteHistoryById = async (id) => {
 //         await sendPushNotification(product.userId.fcmToken, title, body, { product: product.product.title, price: product.product.price.toFixed(2), image: product.product.images[0] });
 //     }
 // }, { timezone: 'Asia/Bangkok' });
-
-
-module.exports = {
-    createProduct,
-    addNote,
-    markAsPurchased,
-    getProducts,
-    getHistory,
-    getProductById,
-    deleteProductById,
-    deleteHistoryById
-};

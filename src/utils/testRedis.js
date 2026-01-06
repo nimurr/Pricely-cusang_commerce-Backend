@@ -17,6 +17,7 @@ const products = {
 
 (async () => {
     // Set a test key
+
     await setRedis("testKey", products, 60);
 
     // Get the test key

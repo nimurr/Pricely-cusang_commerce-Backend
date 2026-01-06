@@ -1,49 +1,30 @@
 const redis = require("redis");
-const config = require("../config/config"); // or use process.env.REDIS_URL
 
-// Create Redis client
 const redisClient = redis.createClient({
-    url: config.redisUrl || "redis://127.0.0.1:6379",
+    url: process.env.REDIS_URL || "redis://127.0.0.1:6379",
 });
 
-redisClient.on("connect", () => console.log("Redis connected"));
-redisClient.on("error", (err) => console.error("Redis error:", err));
+redisClient.on("error", (err) => {
+    console.error("Redis Error:", err);
+});
 
 (async () => {
-    await redisClient.connect();
+    if (!redisClient.isOpen) {
+        await redisClient.connect();
+    }
 })();
 
-// Set value in Redis with optional expiration (in seconds)
-const setRedis = async (key, value, expireInSec = 3600) => {
-    try {
-        // Redis only stores strings, so stringify objects
-        const val = typeof value === "string" ? value : JSON.stringify(value);
-        await redisClient.set(key, val, { EX: expireInSec });
-    } catch (err) {
-        console.error("Redis SET error:", err);
-    }
+const setRedis = async (key, value, ttl = 300) => {
+    await redisClient.set(key, JSON.stringify(value), { EX: ttl });
 };
 
-// Get value from Redis
 const getRedis = async (key) => {
-    try {
-        const value = await redisClient.get(key);
-        if (!value) return null;
-
-        // Try to parse JSON (if value is an object)
-        try {
-            return JSON.parse(value);
-        } catch {
-            return value; // return string if not JSON
-        }
-    } catch (err) {
-        console.error("Redis GET error:", err);
-        return null;
-    }
+    const data = await redisClient.get(key);
+    return data ? JSON.parse(data) : null;
 };
 
-module.exports = {
-    redisClient,
-    setRedis,
-    getRedis,
+const delRedis = async (key) => {
+    await redisClient.del(key);
 };
+
+module.exports = { setRedis, getRedis, delRedis };

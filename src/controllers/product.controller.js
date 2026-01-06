@@ -4,8 +4,6 @@ const catchAsync = require("../utils/catchAsync");
 const { productService } = require("../services");
 
 
-
-
 const createProduct = catchAsync(async (req, res) => {
     const { productUrl } = req.body;
     if (!productUrl) {
