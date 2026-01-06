@@ -8,12 +8,6 @@ const notificationSchema = new Schema({
         ref: 'User',
         required: true
     },
-    role: {
-        type: String,
-        required: false,
-        enum: roles,
-        default: null,
-    },
     products: {
         type: Schema.Types.ObjectId,
         ref: 'Product',
@@ -24,6 +18,8 @@ const notificationSchema = new Schema({
         enum: ['unread', 'read'],
         default: 'unread'
     },
+
+ 
     sendBy: {
         type: Schema.Types.ObjectId,
         ref: 'User',

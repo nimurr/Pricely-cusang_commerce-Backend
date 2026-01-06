@@ -95,12 +95,78 @@ If you did not create an account, then ignore this email.`;
 
 const sendFeedbackEmail = async (to, title, message) => {
   const html = `
-    <h1>New Feedback Received</h1>
-    <p>${title}</p> 
-    <p>${message}</p>
+  <!DOCTYPE html>
+  <html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+    <title>New Feedback</title>
+  </head>
+  <body style="margin:0; padding:0; background-color:#f4f6f8; font-family: Arial, Helvetica, sans-serif;">
+    
+    <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f4f6f8; padding:20px;">
+      <tr>
+        <td align="center">
+          
+          <!-- Main Container -->
+          <table width="600" cellpadding="0" cellspacing="0" style="background:#ffffff; border-radius:8px; overflow:hidden;">
+            
+            <!-- Header -->
+            <tr>
+              <td style="background:#00aff5; padding:20px; text-align:center;">
+                <h1 style="color:#ffffff; margin:0; font-size:24px;">
+                  New Feedback Received
+                </h1>
+              </td>
+            </tr>
+
+            <!-- Content -->
+            <tr>
+              <td style="padding:30px;">
+                <p style="font-size:16px; color:#333; margin-bottom:10px;">
+                  <strong>Title:</strong>
+                </p>
+                <p style="font-size:15px; color:#555; margin-top:0;">
+                  ${title}
+                </p>
+
+                <hr style="border:none; border-top:1px solid #e5e7eb; margin:20px 0;" />
+
+                <p style="font-size:16px; color:#333; margin-bottom:10px;">
+                  <strong>Message:</strong>
+                </p>
+                <p style="font-size:15px; color:#555; line-height:1.6;">
+                  ${message}
+                </p>
+              </td>
+            </tr>
+
+            <!-- Footer -->
+            <tr>
+              <td style="background:#f9fafb; padding:20px; text-align:center;">
+                <p style="font-size:13px; color:#888; margin:0;">
+                  This email was generated automatically from your website.
+                </p>
+                <p style="font-size:13px; color:#888; margin:5px 0 0;">
+                  © ${new Date().getFullYear()} Your Company Name
+                </p>
+              </td>
+            </tr>
+
+          </table>
+          <!-- End Main Container -->
+
+        </td>
+      </tr>
+    </table>
+
+  </body>
+  </html>
   `;
+
   await sendEmail(to, `Feedback: ${title}`, html);
-}
+};
+
 
 module.exports = {
   transport,

@@ -1,9 +1,11 @@
 // notifications controller 
 
+const httpStatus = require("http-status");
 const response = require("../config/response");
 const { notificationsService } = require("../services");
+const catchAsync = require("../utils/catchAsync");
 
-const createNotification = async (req, res) => {
+const createNotification = catchAsync(async (req, res) => {
     try {
 
         const notification = await notificationsService.createNotification(req.body);
@@ -28,8 +30,37 @@ const createNotification = async (req, res) => {
     } catch (error) {
         console.log(error);
     }
-}
+})
+
+const getNotification = catchAsync(async (req, res) => {
+    const { _id } = req.user;
+
+    const notifications = await notificationsService.getNotification({ userId: _id });
+    res.status(200).json(
+        response({
+            message: "Notifications retrieved successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            data: notifications,
+        })
+    );
+})
+const readAllNotification = catchAsync(async (req, res) => {
+    const { _id } = req.user;
+
+    const notifications = await notificationsService.readAllNotification({ userId: _id });
+    res.status(200).json(
+        response({
+            message: "Notifications retrieved successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            data: notifications,
+        })
+    );
+})
 
 module.exports = {
-    createNotification
+    createNotification,
+    getNotification,
+    readAllNotification
 }
