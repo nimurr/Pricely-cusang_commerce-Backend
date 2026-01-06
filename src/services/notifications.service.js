@@ -3,7 +3,7 @@ const { Notification } = require("../models");
 const { getRedis, setRedis, delRedis } = require("../utils/redisClient");
 
 /* -------------------------------------------------------------------------- */
-/*                            CREATE NOTIFICATION                              */
+/*                            CREATE NOTIFICATION                             */
 /* -------------------------------------------------------------------------- */
 
 const createNotification = async (data) => {
@@ -17,7 +17,7 @@ const createNotification = async (data) => {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                             GET NOTIFICATIONS                               */
+/*                             GET NOTIFICATIONS                              */
 /* -------------------------------------------------------------------------- */
 
 
