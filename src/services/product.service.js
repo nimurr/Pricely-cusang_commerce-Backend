@@ -128,7 +128,7 @@ const getProducts = async () => {
         .sort({ createdAt: -1 })
         .lean();
 
-    console.log(products)
+    if (!products.length) throw new Error("No products found");
 
     const response = products.map(p => {
         const day5 = p.product.lastFivePrices.day5;
