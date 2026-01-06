@@ -136,9 +136,9 @@ const getProducts = async () => {
 
         p.product.percentageChange = day5
             ? (((current - day5) / day5) * 100).toFixed(2)
-            : "0.00"; 
+            : "0.00";
 
-        return p; 
+        return p;
     });
 
     await setRedis(cacheKey, response, 300);
