@@ -45,6 +45,10 @@ const getNotification = async ({ userId }) => {
     return notifications;
 };
 
+/* -------------------------------------------------------------------------- */
+/*                            READ ALL NOTIFICATIONS                          */
+/* -------------------------------------------------------------------------- */
+
 const readAllNotification = async ({ userId }) => {
 
 
