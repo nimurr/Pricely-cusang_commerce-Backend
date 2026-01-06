@@ -231,7 +231,7 @@ const deleteHistoryById = async (id) => {
 /* -------------------------------------------------------------------------- */
 
 cron.schedule('0 0 0,12 * * *', async () => {
-     const products = await Product
+    const products = await Product
         .find({ isDelete: false })
         .populate('userId', 'fcmTokens');
 
@@ -264,7 +264,7 @@ cron.schedule('0 0 0,12 * * *', async () => {
             product.userId._id
         );
     }
-   
+
 }, { timezone: 'Asia/Bangkok' });
 
 /* -------------------------------------------------------------------------- */
