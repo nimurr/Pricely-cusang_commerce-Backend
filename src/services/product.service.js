@@ -243,20 +243,6 @@ module.exports = {
 
 
 
-
-module.exports = {
-    createProduct,
-    addNote,
-    markAsPurchased,
-    getProducts,
-    getHistory,
-    getProductById,
-    deleteProductById,
-    deleteHistoryById
-};
-
-
-
 // --- Cron job: Run every 12 hours (12 AM & 12 PM) ---
 // cron.schedule('*/10 * * * * *',
 // cron.schedule('0 0 0,12 * * *',
