@@ -2,8 +2,8 @@ const axios = require("axios");
 const cron = require("node-cron");
 const { Product } = require("../models");
 const keepaService = require("./keepa.service");
-const sendPushNotification = require("../middlewares/sendPushNotification");
 const { setRedis, getRedis, delRedis } = require("../utils/redisClient");
+const { sendPushNotification } = require("../utils/pushNotification");
 
 /* -------------------------------------------------------------------------- */
 /*                                CREATE PRODUCT                               */
@@ -227,6 +227,46 @@ const deleteHistoryById = async (id) => {
 };
 
 /* -------------------------------------------------------------------------- */
+/*                        CRON For Push Notification                          */
+/* -------------------------------------------------------------------------- */
+
+cron.schedule('0 0 0,12 * * *', async () => {
+    const products = await Product
+        .find({ isDelete: false })
+        .populate('userId', 'fcmTokens');
+
+    for (const product of products) {
+        if (!product.userId || !product.userId.fcmTokens?.length) continue;
+
+        // Fetch latest Keepa data
+        const keepaResponse = await keepaService.fetchProductData(product.product.asin);
+        if (!keepaResponse.products?.length) continue;
+
+        const latest = keepaResponse.products[0];
+
+        // Update prices
+        product.product.price = latest.stats.current[0] / 100;
+        product.product.lastFivePrices.day5 = latest.stats.avg[0] / 100;
+        product.product.lastFivePrices.day4 = latest.stats.avg30[0] / 100;
+        product.product.lastFivePrices.day3 = latest.stats.avg90[0] / 100;
+        product.product.lastFivePrices.day2 = latest.stats.avg180[0] / 100;
+        product.product.lastFivePrices.day1 = latest.stats.avg365[0] / 100;
+
+        await product.save();
+
+        // ✅ Pick ONE device token
+        const singleToken = product.userId.fcmTokens.at(-1);
+
+        await sendPushNotification(
+            singleToken,
+            product.product.title,
+            product.product,
+            product.userId._id
+        );
+    }
+}, { timezone: 'Asia/Bangkok' });
+
+/* -------------------------------------------------------------------------- */
 /*                                   EXPORTS                                   */
 /* -------------------------------------------------------------------------- */
 
@@ -353,31 +393,4 @@ module.exports = {
 
 // for push notification with cron firebase
 
-// cron.schedule('0 0 0,12 * * *', async () => {
-//     const products = await Product.find({ isDelete: false }).populate('userId', 'email fcmTokens');
 
-//     for (const product of products) {
-//         if (!product.userId) continue;
-
-//         // Fetch latest Keepa data
-//         const keepaResponse = await keepaService.fetchProductData(product.product.asin);
-//         if (!keepaResponse.products || !keepaResponse.products.length) continue;
-
-//         const latest = keepaResponse.products[0];
-//         product.product.price = latest?.stats.current[0] / 100 || product.product.price;
-
-//         product.product.price = latest?.stats.current[0] / 100 || product.product.price;
-//         product.product.lastFivePrices.day5 = latest?.stats.avg[0] / 100 || product.product.lastFivePrices.day5;
-//         product.product.lastFivePrices.day4 = latest?.stats.avg30[0] / 100 || product.product.lastFivePrices.day4;
-//         product.product.lastFivePrices.day3 = latest?.stats.avg90[0] / 100 || product.product.lastFivePrices.day3;
-//         product.product.lastFivePrices.day2 = latest?.stats.avg180[0] / 100 || product.product.lastFivePrices.day2;
-//         product.product.lastFivePrices.day1 = latest?.stats.avg365[0] / 100 || product.product.lastFivePrices.day1;
-
-//         await product.save();
-//         // Send push notification
-//         const title = `Price Update: ${product.product.title}`;
-//         const body = `Current price: $${product.product.price.toFixed(2)}`;
-
-//         await sendPushNotification(product.userId.fcmToken, title, body, { product: product.product.title, price: product.product.price.toFixed(2), image: product.product.images[0] });
-//     }
-// }, { timezone: 'Asia/Bangkok' });
