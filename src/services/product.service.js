@@ -230,10 +230,12 @@ const deleteHistoryById = async (id) => {
 /*                        CRON For Push Notification                          */
 /* -------------------------------------------------------------------------- */
 
-cron.schedule('0 0 0,12 * * *', async () => {
+cron.schedule('0 06 0,12 * * *', async () => {
     const products = await Product
         .find({ isDelete: false })
         .populate('userId', 'fcmTokens');
+
+    console.log(`...............Push notification send everyday at 12 AM/PM..............`)
 
     for (const product of products) {
         if (!product.userId || !product.userId.fcmTokens?.length) continue;
