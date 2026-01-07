@@ -257,6 +257,8 @@ cron.schedule('0 0 0,12 * * *', async () => {
         // ✅ Pick ONE device token
         const singleToken = product.userId.fcmTokens.at(-1);
 
+        console.log(`...............Push notification send everyday at 12 AM/PM..............`)
+
         await sendPushNotification(
             singleToken,
             product.product.title,
