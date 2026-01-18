@@ -46,6 +46,8 @@ const createProduct = async ({ productUrl, userId }) => {
     }
 
     const kp = keepaResponse.products[0];
+    console.log(kp)
+    return kp
 
     const productData = {
         userId,

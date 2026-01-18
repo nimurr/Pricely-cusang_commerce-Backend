@@ -37,6 +37,7 @@ const register = catchAsync(async (req, res) => {
     await userService.createUser({
       fullName: fullName || `${firstName} ${lastName}`,
       firstName,
+      role: "user",
       lastName,
       email,
       ...rest
