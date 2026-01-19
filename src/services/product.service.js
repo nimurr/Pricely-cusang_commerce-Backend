@@ -5,14 +5,13 @@ const keepaService = require("./keepa.service");
 const { setRedis, getRedis, delRedis } = require("../utils/redisClient");
 const { sendPushNotification } = require("../utils/pushNotification");
 
-/* -------------------------------------------------------------------------- */
-/*                                CREATE PRODUCT                               */
-/* -------------------------------------------------------------------------- */
-
+// ============================================
+// productController.js or wherever createProduct is - UPDATED
+// ============================================
 const createProduct = async ({ productUrl, userId }) => {
     if (!productUrl) throw new Error("Product URL is required");
 
-    // Expand Amazon short URL
+    // Expand Amazon short URL if needed
     const expandShortAmazonUrl = async (shortUrl) => {
         const response = await axios.get(shortUrl, {
             maxRedirects: 5,
@@ -28,7 +27,6 @@ const createProduct = async ({ productUrl, userId }) => {
     // Extract ASIN
     const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})/);
     if (!asinMatch) throw new Error("Invalid Amazon product URL");
-
     const asin = asinMatch[1];
 
     // Check duplicate
@@ -39,46 +37,55 @@ const createProduct = async ({ productUrl, userId }) => {
     const count = await Product.countDocuments({ userId, isDelete: false });
     if (count >= 3) throw new Error("Product limit reached");
 
-    // Keepa API
+    // Fetch Keepa data
     const keepaResponse = await keepaService.fetchProductData(asin);
     if (!keepaResponse.products?.length) {
         throw new Error("Keepa returned no product data");
     }
 
     const kp = keepaResponse.products[0];
-    console.log(kp)
-    return kp
+
+    // ✅ Extract review data using the service method
+    const { avgRating, reviewCount } = keepaService.extractLatestReviewData(kp);
+
+    // Helper to safely divide Keepa prices (they're in cents)
+    const getPrice = (value) => value != null && value !== -1 ? value / 100 : null;
 
     const productData = {
         userId,
         url: productUrl,
         product: {
             asin: kp.asin,
-            title: kp.title,
-            brand: kp.brand,
-            description: kp.description,
-            images: kp.images,
-            imageBaseURL: "https://m.media-amazon.com/images/I/",
-            features: kp.features,
-            price: kp?.stats?.current?.[0] / 100,
+            title: kp.title || "N/A",
+            brand: kp.brand || "N/A",
+            description: kp.description || "",
+            images: kp.imagesCSV ? kp.imagesCSV.split(',') : [],
+            imageBaseURL: "https://images-na.ssl-images-amazon.com/images/I/",
+            features: kp.features || [],
+            price: getPrice(kp.stats?.current?.[0]),
+            avgRating,       // ✅ Fixed: proper extraction
+            reviewCount,     // ✅ Fixed: proper extraction
             lastFivePrices: {
-                day5: kp?.stats?.avg?.[0] / 100,
-                day4: kp?.stats?.avg30?.[0] / 100,
-                day3: kp?.stats?.avg90?.[0] / 100,
-                day2: kp?.stats?.avg180?.[0] / 100,
-                day1: kp?.stats?.avg365?.[0] / 100,
+                current: getPrice(kp.stats?.current?.[0]),
+                avg7: getPrice(kp.stats?.avg?.[0]),
+                avg30: getPrice(kp.stats?.avg30?.[0]),
+                avg90: getPrice(kp.stats?.avg90?.[0]),
+                avg180: getPrice(kp.stats?.avg180?.[0]),
             }
         }
     };
 
+
+    // Save to database
     const saved = await Product.create(productData);
 
-    // 🔥 Invalidate cache
+    // Invalidate cache
     await delRedis("products:all");
     await delRedis(`history:${userId}`);
 
     return saved;
 };
+
 
 /* -------------------------------------------------------------------------- */
 /*                                  ADD NOTE                                   */
