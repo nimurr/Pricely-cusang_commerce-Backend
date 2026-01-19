@@ -11,6 +11,10 @@ const { sendPushNotification } = require("../utils/pushNotification");
 const createProduct = async ({ productUrl, userId }) => {
     if (!productUrl) throw new Error("Product URL is required");
 
+    const ifExists = await Product.findOne({ url: productUrl, userId, isDelete: false });
+    if (ifExists) throw new Error("Product already exists");
+
+
     // Expand Amazon short URL if needed
     const expandShortAmazonUrl = async (shortUrl) => {
         const response = await axios.get(shortUrl, {
