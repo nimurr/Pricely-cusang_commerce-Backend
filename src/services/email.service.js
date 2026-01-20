@@ -145,10 +145,10 @@ const sendFeedbackEmail = async (to, title, message) => {
             <tr>
               <td style="background:#f9fafb; padding:20px; text-align:center;">
                 <p style="font-size:13px; color:#888; margin:0;">
-                  This email was generated automatically from your website.
+                  This email was send user from your website.
                 </p>
                 <p style="font-size:13px; color:#888; margin:5px 0 0;">
-                  © ${new Date().getFullYear()} Your Company Name
+                  © ${new Date().getFullYear()} <span style="color:#00aff5;">Pricely</span>. All rights reserved.
                 </p>
               </td>
             </tr>
