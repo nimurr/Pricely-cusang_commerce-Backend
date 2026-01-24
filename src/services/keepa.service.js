@@ -102,7 +102,7 @@ class KeepaService {
     async fetchProductData(asin) {
         const params = {
             key: this.apiKey,
-            domain: 1,      // Amazon.com
+            domain: 3,      //       
             asin: asin,
             stats: 90,      // Include statistics
             rating: 1,      // Include rating & review history

@@ -67,7 +67,10 @@ const userSchema = mongoose.Schema(
       required: false,
       default: null
     },
-
+    isPushNotification: {
+      type: Boolean,
+      default: false
+    },
     isSubscription: {
       type: Boolean,
       default: false

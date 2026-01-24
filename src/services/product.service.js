@@ -24,7 +24,7 @@ const createProduct = async ({ productUrl, userId }) => {
         return response.request.res.responseUrl || shortUrl;
     };
 
-    if (productUrl.includes("a.co/") || productUrl.includes("c.co/")) {
+    if (productUrl.includes("amzn.eu/") || productUrl.includes("c.co/")) {
         productUrl = await expandShortAmazonUrl(productUrl);
     }
 
@@ -70,11 +70,11 @@ const createProduct = async ({ productUrl, userId }) => {
             avgRating,       // ✅ Fixed: proper extraction
             reviewCount,     // ✅ Fixed: proper extraction
             lastFivePrices: {
-                current: getPrice(kp.stats?.current?.[0]),
-                avg7: getPrice(kp.stats?.avg?.[0]),
-                avg30: getPrice(kp.stats?.avg30?.[0]),
-                avg90: getPrice(kp.stats?.avg90?.[0]),
-                avg180: getPrice(kp.stats?.avg180?.[0]),
+                five: getPrice(kp.stats?.current?.[0]),
+                four: getPrice(kp.stats?.avg?.[0]),
+                three: getPrice(kp.stats?.avg30?.[0]),
+                two: getPrice(kp.stats?.avg90?.[0]),
+                one: getPrice(kp.stats?.avg180?.[0]),
             }
         }
     };
