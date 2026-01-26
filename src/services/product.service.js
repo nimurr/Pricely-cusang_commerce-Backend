@@ -11,6 +11,12 @@ const { sendPushNotification } = require("../utils/pushNotification");
 const createProduct = async ({ productUrl, userId }) => {
     if (!productUrl) throw new Error("Product URL is required");
 
+    // Limit per user
+    // find all products
+    const count = await Product.countDocuments({ userId, isDelete: false });
+
+    if (count > 2) throw new Error("Maximum number (3 item) of products reached");
+
     const ifExists = await Product.findOne({ url: productUrl, userId, isDelete: false });
     if (ifExists) throw new Error("Product already exists");
 
@@ -23,6 +29,17 @@ const createProduct = async ({ productUrl, userId }) => {
         });
         return response.request.res.responseUrl || shortUrl;
     };
+
+    if (!productUrl.startsWith("https://")) {
+        const parts = productUrl.split("https://");
+
+        if (parts.length > 1) {
+            productUrl = "https://" + parts[1];  // ✅ second item used
+            console.log(productUrl)
+        } else {
+            throw new Error("No https URL found in productUrl");
+        }
+    }
 
     if (productUrl.includes("amzn.eu/") || productUrl.includes("c.co/")) {
         productUrl = await expandShortAmazonUrl(productUrl);
@@ -37,9 +54,7 @@ const createProduct = async ({ productUrl, userId }) => {
     const exists = await Product.findOne({ url: productUrl, userId, isDelete: false });
     if (exists) throw new Error("Product already exists");
 
-    // Limit per user
-    const count = await Product.countDocuments({ userId, isDelete: false });
-    if (count >= 3) throw new Error("Product limit reached");
+
 
     // Fetch Keepa data
     const keepaResponse = await keepaService.fetchProductData(asin);
@@ -91,6 +106,18 @@ const createProduct = async ({ productUrl, userId }) => {
 };
 
 
+const isMyProduct = async (userId) => {
+    const product = await Product.findOne({ userId, isDelete: false });
+    const data2 = {
+        isProductIs: false,
+    };
+    if (!product) return data2;
+    const data = {
+        isProductIs: true,
+    }
+    return data;
+};
+
 /* -------------------------------------------------------------------------- */
 /*                                  ADD NOTE                                   */
 /* -------------------------------------------------------------------------- */
@@ -129,7 +156,8 @@ const markAsPurchased = async (id) => {
 /*                                 GET PRODUCTS                                */
 /* -------------------------------------------------------------------------- */
 
-const getProducts = async () => {
+const getProducts = async (userId) => {
+
     const cacheKey = "products:all";
 
     const cached = await getRedis(cacheKey);
@@ -137,7 +165,7 @@ const getProducts = async () => {
         return cached
     };
 
-    const products = await Product.find({ isDelete: false })
+    const products = await Product.find({ userId, isDelete: false })
         .sort({ createdAt: -1 })
         .lean();
 
@@ -160,7 +188,7 @@ const getProducts = async () => {
 };
 
 /* -------------------------------------------------------------------------- */
-/*                                 GET HISTORY                                 */
+/*                                 GET HISTORY                                */
 /* -------------------------------------------------------------------------- */
 
 const getHistory = async (userId) => {
@@ -292,6 +320,7 @@ cron.schedule('0 0 0,12 * * *', async () => {
 
 module.exports = {
     createProduct,
+    isMyProduct,
     addNote,
     markAsPurchased,
     getProducts,

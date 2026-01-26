@@ -8,6 +8,8 @@ router.get("/",
     auth("user"),
     productController.getProducts);
 
+router.get('/all/isproduct', auth("user"), productController.isMyProduct);
+
 // Create a new product
 router.post("/",
     auth("user"),

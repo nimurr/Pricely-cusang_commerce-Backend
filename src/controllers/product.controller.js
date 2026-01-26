@@ -26,6 +26,18 @@ const createProduct = catchAsync(async (req, res) => {
     );
 });
 
+const isMyProduct = catchAsync(async (req, res) => {
+    const product = await productService.isMyProduct(req.user.id);
+    res.status(200).json(
+        response({
+            message: "Product retrieved successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            data: product,
+        })
+    );
+});
+
 const addNote = catchAsync(async (req, res) => {
     const { note } = req.body;
     const id = req.params.id;
@@ -54,7 +66,19 @@ const markAsPurchased = catchAsync(async (req, res) => {
 });
 
 const getProducts = catchAsync(async (req, res) => {
-    const products = await productService.getProducts();
+
+    const user = req.user;
+    if (!user) {
+        return res.status(401).json(
+            response({
+                message: "Unauthorized",
+                status: "UNAUTHORIZED",
+                statusCode: httpStatus.UNAUTHORIZED,
+            })
+        );
+    }
+
+    const products = await productService.getProducts(user.id);
 
     res.status(200).json(
         response({
@@ -156,6 +180,7 @@ const deleteHistoryById = catchAsync(async (req, res) => {
 
 module.exports = {
     createProduct,
+    isMyProduct,
     addNote,
     markAsPurchased,
     getProducts,
