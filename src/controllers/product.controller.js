@@ -175,6 +175,48 @@ const deleteHistoryById = catchAsync(async (req, res) => {
     );
 });
 
+const pushNotification = catchAsync(async (req, res) => {
+    const product = await productService.pushNotification(req.params.id);
+    if (!product) {
+        return res.status(404).json(
+            response({
+                message: "Product not found",
+                status: "NOT_FOUND",
+                statusCode: httpStatus.NOT_FOUND,
+            })
+        );
+    }
+    res.status(200).json(
+        response({
+            message: "Notification Status Changed !",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            // data: product,
+        })
+    );
+});
+
+const removeItemAfter30Day = catchAsync(async (req, res) => {
+    const product = await productService.removeItemAfter30Day(req.params.id);
+    if (!product) {
+        return res.status(404).json(
+            response({
+                message: "Product not found",
+                status: "NOT_FOUND",
+                statusCode: httpStatus.NOT_FOUND,
+            })
+        );
+    }
+    res.status(200).json(
+        response({
+            message: "Remvoe Item After 30 Day !",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            // data: product,
+        })
+    );
+});
+
 
 
 
@@ -187,5 +229,8 @@ module.exports = {
     getHistory,
     getProductById,
     deleteProductById,
-    deleteHistoryById
+    deleteHistoryById,
+
+    pushNotification,
+    removeItemAfter30Day
 };  

@@ -41,4 +41,10 @@ router.delete("/history/:id",
     auth("user"),
     productController.deleteHistoryById);
 
+
+//   "isPushNotification": false,
+router.patch('/push-notify/:id', auth('user'), productController.pushNotification);
+//     "removeItemAfter30Day": false,
+router.patch('/remove-item-after-30-day/:id', auth('user'), productController.removeItemAfter30Day);
+
 module.exports = router;

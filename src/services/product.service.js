@@ -267,6 +267,38 @@ const deleteHistoryById = async (id) => {
     return await Product.findByIdAndDelete(id);
 };
 
+const pushNotification = async (id) => {
+    const product = await Product.findById(id);
+    if (!product) throw new Error("Product not found");
+
+    product.isPushNotification = !product.isPushNotification;
+    await product.save();
+
+    // 🔥 clear related caches
+    await delRedis("products:all");
+    await delRedis(`product:${id}`);
+    await delRedis(`history:${product.userId}`);
+
+    return product;
+};
+
+
+const removeItemAfter30Day = async (id) => {
+    const product = await Product.findById(id);
+    if (!product) throw new Error("Product not found");
+
+    product.removeItemAfter30Day = !product.removeItemAfter30Day;
+    await product.save();
+
+    // 🔥 clear related caches
+    await delRedis("products:all");
+    await delRedis(`product:${id}`);
+    await delRedis(`history:${product.userId}`);
+
+    return product;
+};
+
+
 /* -------------------------------------------------------------------------- */
 /*                        CRON For Push Notification                          */
 /* -------------------------------------------------------------------------- */
@@ -327,7 +359,10 @@ module.exports = {
     getHistory,
     getProductById,
     deleteProductById,
-    deleteHistoryById
+    deleteHistoryById,
+
+    pushNotification,
+    removeItemAfter30Day
 };
 
 
