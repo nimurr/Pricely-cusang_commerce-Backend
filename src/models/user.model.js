@@ -71,6 +71,10 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false
     },
+    oneTimePushAcceptedorReject: {
+      type: Boolean,
+      default: false
+    },
     isSubscription: {
       type: Boolean,
       default: false

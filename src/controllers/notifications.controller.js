@@ -59,8 +59,44 @@ const readAllNotification = catchAsync(async (req, res) => {
     );
 })
 
+const updatePushNotification = catchAsync(async (req, res) => {
+    const { _id } = req.user;
+    const data = req.body;
+
+
+    await notificationsService.updatePushNotification({
+        id: _id,
+        data,
+    });
+
+    res.status(200).json(
+        response({
+            message: "Notification preference updated successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            data: {},
+        })
+    );
+});
+
+const getPushNotification = catchAsync(async (req, res) => {
+    const { _id } = req.user;
+    const notifications = await notificationsService.getPushNotification({ userId: _id });
+    res.status(200).json(
+        response({
+            message: "Notifications retrieved successfully",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            data: notifications,
+        })
+    );
+});
+
+
 module.exports = {
     createNotification,
     getNotification,
-    readAllNotification
+    readAllNotification,
+    updatePushNotification,
+    getPushNotification
 }

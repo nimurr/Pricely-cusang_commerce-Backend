@@ -1,5 +1,5 @@
 
-const { Notification } = require("../models");
+const { Notification, User } = require("../models");
 const { getRedis, setRedis, delRedis } = require("../utils/redisClient");
 
 /* -------------------------------------------------------------------------- */
@@ -62,8 +62,31 @@ const readAllNotification = async ({ userId }) => {
     return notifications
 }
 
+const updatePushNotification = async ({ id, data }) => {
+
+    console.log("USER ID:", id);
+
+    return await User.updateOne(
+        { _id: id },
+        {
+            $set: {
+                oneTimePushAcceptedorReject: true,
+                isPushNotification: data.isPushNotification,
+            },
+        }
+    );
+};
+
+const getPushNotification = async ({ userId }) => {
+
+    return await User.findById({ _id: userId }, 'isPushNotification oneTimePushAcceptedorReject');
+}
+
+
 module.exports = {
     createNotification,
     getNotification,
-    readAllNotification
+    readAllNotification,
+    updatePushNotification,
+    getPushNotification
 };
