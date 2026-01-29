@@ -15,7 +15,7 @@ const createProduct = catchAsync(async (req, res) => {
             })
         );
     }
-    const product = await productService.createProduct({ productUrl, userId: req.user.id });
+    const product =await productService.createProduct({ productUrl, userId: req.user.id });
     res.status(201).json(
         response({
             message: "Product Added successfully",
@@ -196,6 +196,27 @@ const pushNotification = catchAsync(async (req, res) => {
     );
 });
 
+const ifNotChange7Day = catchAsync(async (req, res) => {
+    const product = await productService.ifNotChange7Day(req.params.id);
+    if (!product) {
+        return res.status(404).json(
+            response({
+                message: "Product not found",
+                status: "NOT_FOUND",
+                statusCode: httpStatus.NOT_FOUND,
+            })
+        );
+    }
+    res.status(200).json(
+        response({
+            message: "Notification Status Changed !",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            // data: product,
+        })
+    );
+});
+
 const removeItemAfter30Day = catchAsync(async (req, res) => {
     const product = await productService.removeItemAfter30Day(req.params.id);
     if (!product) {
@@ -232,5 +253,6 @@ module.exports = {
     deleteHistoryById,
 
     pushNotification,
+    ifNotChange7Day,
     removeItemAfter30Day
 };  

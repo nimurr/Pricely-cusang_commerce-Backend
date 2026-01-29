@@ -44,6 +44,10 @@ router.delete("/history/:id",
 
 //   "isPushNotification": false,
 router.patch('/push-notify/:id', auth('user'), productController.pushNotification);
+
+//  ifNotChange7Day: { type: Boolean, default: false }, // get Push Notification based of updatedAt after 7 days
+router.patch('/if-not-change-7-day/:id', auth('user'), productController.ifNotChange7Day);
+
 //     "removeItemAfter30Day": false,
 router.patch('/remove-item-after-30-day/:id', auth('user'), productController.removeItemAfter30Day);
 

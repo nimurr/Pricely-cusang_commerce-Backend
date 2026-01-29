@@ -11,64 +11,61 @@ const { sendPushNotification } = require("../utils/pushNotification");
 const createProduct = async ({ productUrl, userId }) => {
     if (!productUrl) throw new Error("Product URL is required");
 
-    // Limit per user
-    // find all products
-    const count = await Product.countDocuments({ userId, isDelete: false });
+    // 1️⃣ Extract clean https URL from messy string
+    const urlMatch = productUrl.match(/https:\/\/[^\s]+/);
+    if (!urlMatch) throw new Error("No valid https URL found");
+    productUrl = urlMatch[0].trim();
 
+    // 2️⃣ Limit per user
+    const count = await Product.countDocuments({ userId, isDelete: false });
     if (count > 2) throw new Error("Maximum number (3 item) of products reached");
 
-    const ifExists = await Product.findOne({ url: productUrl, userId, isDelete: false });
-    if (ifExists) throw new Error("Product already exists");
-
-
-    // Expand Amazon short URL if needed
+    // 3️⃣ Expand short Amazon URL safely
     const expandShortAmazonUrl = async (shortUrl) => {
-        const response = await axios.get(shortUrl, {
-            maxRedirects: 5,
-            validateStatus: (status) => status >= 200 && status < 400
-        });
-        return response.request.res.responseUrl || shortUrl;
+        try {
+            const response = await axios.get(shortUrl, {
+                maxRedirects: 5,
+                timeout: 8000,
+                headers: {
+                    "User-Agent": "Mozilla/5.0"
+                },
+                validateStatus: (status) => status >= 200 && status < 400
+            });
+
+            return response.request?.res?.responseUrl || shortUrl;
+        } catch (err) {
+            console.error("Short URL expand failed:", err.message);
+            return shortUrl; // fail silently
+        }
     };
 
-    if (!productUrl.startsWith("https://")) {
-        const parts = productUrl.split("https://");
-
-        if (parts.length > 1) {
-            productUrl = "https://" + parts[1];  // ✅ second item used
-            console.log(productUrl)
-        } else {
-            throw new Error("No https URL found in productUrl");
-        }
-    }
-
-    if (productUrl.includes("amzn.eu/") || productUrl.includes("c.co/")) {
+    if (/amzn\.eu|c\.co/.test(productUrl)) {
         productUrl = await expandShortAmazonUrl(productUrl);
     }
 
-    // Extract ASIN
-    const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})/);
-    if (!asinMatch) throw new Error("Invalid Amazon product URL");
-    const asin = asinMatch[1];
+    // 4️⃣ Extract ASIN (dp OR gp/product)
+    const asinMatch = productUrl.match(
+        /\/dp\/([A-Z0-9]{10})|\/gp\/product\/([A-Z0-9]{10})/
+    );
 
-    // Check duplicate
-    const exists = await Product.findOne({ url: productUrl, userId, isDelete: false });
+    if (!asinMatch) throw new Error("Invalid Amazon product URL");
+
+    const asin = asinMatch[1] || asinMatch[2];
+
+    // 5️⃣ Prevent duplicate
+    const exists = await Product.findOne({ "product.asin": asin, userId, isDelete: false });
     if (exists) throw new Error("Product already exists");
 
-
-
-    // Fetch Keepa data
+    // 6️⃣ Fetch Keepa
     const keepaResponse = await keepaService.fetchProductData(asin);
     if (!keepaResponse.products?.length) {
         throw new Error("Keepa returned no product data");
     }
 
     const kp = keepaResponse.products[0];
-
-    // ✅ Extract review data using the service method
     const { avgRating, reviewCount } = keepaService.extractLatestReviewData(kp);
 
-    // Helper to safely divide Keepa prices (they're in cents)
-    const getPrice = (value) => value != null && value !== -1 ? value / 100 : null;
+    const getPrice = (v) => (v != null && v !== -1 ? v / 100 : null);
 
     const productData = {
         userId,
@@ -78,12 +75,12 @@ const createProduct = async ({ productUrl, userId }) => {
             title: kp.title || "N/A",
             brand: kp.brand || "N/A",
             description: kp.description || "",
-            images: kp.imagesCSV ? kp.imagesCSV.split(',') : [],
+            images: kp.imagesCSV ? kp.imagesCSV.split(",") : [],
             imageBaseURL: "https://images-na.ssl-images-amazon.com/images/I/",
             features: kp.features || [],
             price: getPrice(kp.stats?.current?.[0]),
-            avgRating,       // ✅ Fixed: proper extraction
-            reviewCount,     // ✅ Fixed: proper extraction
+            avgRating,
+            reviewCount,
             lastFivePrices: {
                 five: getPrice(kp.stats?.current?.[0]),
                 four: getPrice(kp.stats?.avg?.[0]),
@@ -94,16 +91,14 @@ const createProduct = async ({ productUrl, userId }) => {
         }
     };
 
-
-    // Save to database
     const saved = await Product.create(productData);
 
-    // Invalidate cache
     await delRedis("products:all");
     await delRedis(`history:${userId}`);
 
     return saved;
 };
+
 
 
 const isMyProduct = async (userId) => {
@@ -125,10 +120,8 @@ const isMyProduct = async (userId) => {
 const addNote = async (id, note) => {
     const product = await Product.findByIdAndUpdate(id, { note }, { new: true });
     if (!product) throw new Error("Product not found");
-
     await delRedis(`product:${id}`);
     await delRedis("products:all");
-
     return product;
 };
 
@@ -142,13 +135,10 @@ const markAsPurchased = async (id) => {
         { isPurchased: true, isDelete: true },
         { new: true }
     );
-
     if (!product) throw new Error("Product not found");
-
     await delRedis("products:all");
     await delRedis(`product:${id}`);
     await delRedis(`history:${product.userId}`);
-
     return product;
 };
 
@@ -157,33 +147,25 @@ const markAsPurchased = async (id) => {
 /* -------------------------------------------------------------------------- */
 
 const getProducts = async (userId) => {
-
     const cacheKey = "products:all";
-
     const cached = await getRedis(cacheKey);
     if (cached) {
         return cached
     };
-
     const products = await Product.find({ userId, isDelete: false })
         .sort({ createdAt: -1 })
         .lean();
-
     if (!products.length) throw new Error("No products found");
-
     const response = products.map(p => {
         const day5 = p.product.lastFivePrices.day5;
         const current = p.product.price;
-
         p.product.percentageChange = day5
             ? (((current - day5) / day5) * 100).toFixed(2)
             : "0.00";
 
         return p;
     });
-
     await setRedis(cacheKey, response, 300);
-
     return response;
 };
 
@@ -193,17 +175,13 @@ const getProducts = async (userId) => {
 
 const getHistory = async (userId) => {
     const cacheKey = `history:${userId}`;
-
     const cached = await getRedis(cacheKey);
     if (cached) return cached;
-
     const products = await Product.find({
         userId,
         isDelete: true
     }).sort({ createdAt: -1 }).lean();
-
     let totalDifference = 0;
-
     const response = products.map(p => {
         if (p.isPurchased) {
             const diff = p.product.price - (p.product.lastFivePrices.day5 || 0);
@@ -214,14 +192,11 @@ const getHistory = async (userId) => {
         }
         return p;
     });
-
     const data = {
         totalDifference: Number(totalDifference.toFixed(2)),
         products: response
     };
-
     await setRedis(cacheKey, data, 300);
-
     return data;
 };
 
@@ -231,21 +206,16 @@ const getHistory = async (userId) => {
 
 const getProductById = async (id) => {
     const cacheKey = `product:${id}`;
-
     const cached = await getRedis(cacheKey);
     if (cached) return cached;
-
     const product = await Product.findById(id).lean();
     if (!product) throw new Error("Product not found");
 
     const prices = Object.values(product.product.lastFivePrices)
         .filter(p => p != null);
-
     product.product.lowestPrice =
         prices.length ? Math.min(...prices) : null;
-
     await setRedis(cacheKey, product, 300);
-
     return product;
 };
 
@@ -281,6 +251,21 @@ const pushNotification = async (id) => {
 
     return product;
 };
+
+const ifNotChange7Day = async (id) => {
+    const product = await Product.findById(id);
+    if (!product) throw new Error("Product not found");
+
+    product.ifNotChange7Day = !product.ifNotChange7Day;
+    await product.save();
+
+    // 🔥 clear related caches
+    await delRedis("products:all");
+    await delRedis(`product:${id}`);
+    await delRedis(`history:${product.userId}`);
+
+    return product;
+}
 
 
 const removeItemAfter30Day = async (id) => {
@@ -362,6 +347,7 @@ module.exports = {
     deleteHistoryById,
 
     pushNotification,
+    ifNotChange7Day,
     removeItemAfter30Day
 };
 
