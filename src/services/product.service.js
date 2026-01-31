@@ -157,10 +157,10 @@ const getProducts = async (userId) => {
         .lean();
     if (!products.length) throw new Error("No products found");
     const response = products.map(p => {
-        const day5 = p.product.lastFivePrices.day5;
+        const five = p.product.lastFivePrices.five;
         const current = p.product.price;
-        p.product.percentageChange = day5
-            ? (((current - day5) / day5) * 100).toFixed(2)
+        p.product.percentageChange = five
+            ? (((current - five) / five) * 100).toFixed(2)
             : "0.00";
 
         return p;
@@ -184,7 +184,7 @@ const getHistory = async (userId) => {
     let totalDifference = 0;
     const response = products.map(p => {
         if (p.isPurchased) {
-            const diff = p.product.price - (p.product.lastFivePrices.day5 || 0);
+            const diff = p.product.price - (p.product.lastFivePrices.five || 0);
             p.product.saveAmount = Number(diff.toFixed(2));
             totalDifference += diff;
         } else {
@@ -205,9 +205,9 @@ const getHistory = async (userId) => {
 /* -------------------------------------------------------------------------- */
 
 const getProductById = async (id) => {
-    const cacheKey = `product:${id}`;
-    const cached = await getRedis(cacheKey);
-    if (cached) return cached;
+    // const cacheKey = `product:${id}`;
+    // const cached = await getRedis(cacheKey);
+    // if (cached) return cached;
     const product = await Product.findById(id).lean();
     if (!product) throw new Error("Product not found");
 
@@ -216,13 +216,17 @@ const getProductById = async (id) => {
     product.product.lowestPrice =
         prices.length ? Math.min(...prices) : null;
 
-    const day5 = product.product.lastFivePrices.day5;
+    const five = product.product.lastFivePrices.five;
     const current = product.product.price;
-    product.product.percentageChange = day5
-        ? (((current - day5) / day5) * 100).toFixed(2)
-        : "0.00";
 
-    await setRedis(cacheKey, product, 300);
+    const percentageChange =
+        five && five !== 0
+            ? (((current - five) / five) * 100).toFixed(2)
+            : "0.00";
+
+    product.product.percentageChange = percentageChange;
+
+    // await setRedis(cacheKey, product, 300);
     return product;
 };
 
