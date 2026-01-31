@@ -215,6 +215,13 @@ const getProductById = async (id) => {
         .filter(p => p != null);
     product.product.lowestPrice =
         prices.length ? Math.min(...prices) : null;
+
+    const day5 = product.product.lastFivePrices.day5;
+    const current = product.product.price;
+    product.product.percentageChange = day5
+        ? (((current - day5) / day5) * 100).toFixed(2)
+        : "0.00";
+
     await setRedis(cacheKey, product, 300);
     return product;
 };
@@ -308,11 +315,11 @@ cron.schedule('0 0 0,12 * * *', async () => {
 
         // Update prices
         product.product.price = latest.stats.current[0] / 100;
-        product.product.lastFivePrices.day5 = latest.stats.avg[0] / 100;
-        product.product.lastFivePrices.day4 = latest.stats.avg30[0] / 100;
-        product.product.lastFivePrices.day3 = latest.stats.avg90[0] / 100;
-        product.product.lastFivePrices.day2 = latest.stats.avg180[0] / 100;
-        product.product.lastFivePrices.day1 = latest.stats.avg365[0] / 100;
+        product.product.lastFivePrices.five = latest.stats.avg[0] / 100;
+        product.product.lastFivePrices.four = latest.stats.avg30[0] / 100;
+        product.product.lastFivePrices.three = latest.stats.avg90[0] / 100;
+        product.product.lastFivePrices.two = latest.stats.avg180[0] / 100;
+        product.product.lastFivePrices.one = latest.stats.avg365[0] / 100;
 
         await product.save();
 
