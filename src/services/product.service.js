@@ -245,7 +245,11 @@ const deleteProductById = async (id) => {
 };
 
 const deleteHistoryById = async (id) => {
-    return await Product.findByIdAndDelete(id);
+    const product = await Product.findByIdAndDelete(id)
+    await delRedis("products:all");
+    await delRedis(`product:${id}`);
+    await delRedis(`history:${product.userId}`);
+    return product;
 };
 
 const pushNotification = async (id) => {
