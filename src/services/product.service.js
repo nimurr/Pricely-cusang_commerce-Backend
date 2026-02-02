@@ -306,7 +306,7 @@ const removeItemAfter30Day = async (id) => {
 cron.schedule('0 0 0,12 * * *', async () => {
     console.log(`...............Push notification send everyday at 12 AM/PM..............`)
 
-    return
+    // return
     const products = await Product
         .find({ isDelete: false })
         .populate('userId', 'fcmTokens');

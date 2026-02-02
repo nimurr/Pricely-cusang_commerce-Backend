@@ -21,11 +21,11 @@ const sendPushNotification = async (fcmToken, title, product, userId) => {
         const response = await admin.messaging().send(message);
         console.log("Push notification sent:", response);
 
-        // Save notification in DB
-        await Notification.create({
-            userId,
-            products: product,
-        });
+        // // Save notification in DB
+        // await Notification.create({
+        //     userId,
+        //     products: product,
+        // });
 
     } catch (error) {
         console.error("Push notification error:", error);
