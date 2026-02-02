@@ -1,19 +1,16 @@
-
 const { Notification, User } = require("../models");
 const { getRedis, setRedis, delRedis } = require("../utils/redisClient");
+const { sendPushNotification } = require("../utils/pushNotification");
 
 /* -------------------------------------------------------------------------- */
 /*                            CREATE NOTIFICATION                             */
 /* -------------------------------------------------------------------------- */
 
-const createNotification = async (data) => {
-    const notification = await Notification.create(data);
+const createNotification = async (fcmToken) => {
 
-    // 🔥 Invalidate user's notification cache
-    const cacheKey = `notifications:unread:${data.userId}`;
-    await delRedis(cacheKey);
+    await sendPushNotification(fcmToken);
 
-    return notification;
+    return fcmToken;
 };
 
 /* -------------------------------------------------------------------------- */

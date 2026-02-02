@@ -19,7 +19,7 @@ const notificationSchema = new Schema({
         default: 'unread'
     },
 
- 
+
     sendBy: {
         type: Schema.Types.ObjectId,
         ref: 'User',

@@ -6,9 +6,22 @@ const { notificationsService } = require("../services");
 const catchAsync = require("../utils/catchAsync");
 
 const createNotification = catchAsync(async (req, res) => {
+
+    const fcmToken = req.user.fcmToken;
+
+    if (!fcmToken) {
+        return res.status(400).json(
+            response({
+                message: "FCM token is required",
+                status: "BAD_REQUEST",
+                statusCode: httpStatus.BAD_REQUEST,
+            })
+        );
+    }
+
     try {
 
-        const notification = await notificationsService.createNotification(req.body);
+        const notification = await notificationsService.createNotification(fcmToken);
         if (!notification) {
             return res.status(404).json(
                 response({

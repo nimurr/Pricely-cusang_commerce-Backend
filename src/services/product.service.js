@@ -153,7 +153,7 @@ const getProducts = async (userId) => {
         return cached
     };
     const products = await Product.find({ userId, isDelete: false })
-        .sort({ createdAt: -1 })
+        // .sort({ createdAt: -1 })
         .lean();
     if (!products.length) throw new Error("No products found");
     const response = products.map(p => {
