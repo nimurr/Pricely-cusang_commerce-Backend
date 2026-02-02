@@ -5,6 +5,7 @@ const catchAsync = require("../utils/catchAsync");
 
 const createFeedback = catchAsync(async (req, res) => {
     const feedbackData = req.body;
+    const { email } = req.user;
     if (!feedbackData.title || !feedbackData.message) {
         return res.status(httpStatus.BAD_REQUEST).json(
             response({
@@ -15,7 +16,7 @@ const createFeedback = catchAsync(async (req, res) => {
         );
     }
     // Here you would typically call a service to handle the feedback creation logic
-    const createdFeedback = feedbackService.createFeedback(feedbackData);
+    const createdFeedback = feedbackService.createFeedback(email ,feedbackData);
 
     res.status(httpStatus.CREATED).json(
         response({

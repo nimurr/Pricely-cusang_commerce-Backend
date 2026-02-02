@@ -56,6 +56,9 @@ const register = catchAsync(async (req, res) => {
 
 const login = catchAsync(async (req, res) => {
   const { email, password, fcmToken } = req.body;
+
+  
+
   const isUser = await userService.getUserByEmail(email);
   // here we check if the user is in the database or not
   if (isUser?.isDeleted === true) {

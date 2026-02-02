@@ -303,48 +303,46 @@ const removeItemAfter30Day = async (id) => {
 /*                        CRON For Push Notification                          */
 /* -------------------------------------------------------------------------- */
 
-cron.schedule('0 0 0,12 * * *', async () => {
-    console.log(`...............Push notification send everyday at 12 AM/PM..............`)
+cron.schedule('0 0 0,12 * * *',
+// cron.schedule('*/05 * * * * *',
 
-    // return
-    const products = await Product
-        .find({ isDelete: false })
-        .populate('userId', 'fcmTokens');
+    async () => {
+
+        // return
+        const products = await Product
+            .find({ isDelete: false })
+            .populate('userId', 'fcmToken isPushNotification oneTimePushAcceptedorReject');
+
+        // console.log(products)
 
 
-    for (const product of products) {
-        if (!product.userId || !product.userId.fcmTokens?.length) continue;
+        for (const product of products) {
+            if (!product.userId || !product.userId.fcmToken?.length) continue;
+            if (!product?.userId.isPushNotification || !product?.userId?.oneTimePushAcceptedorReject) continue;
+            if (!product?.isPushNotification) continue;
 
-        // Fetch latest Keepa data
-        const keepaResponse = await keepaService.fetchProductData(product.product.asin);
-        if (!keepaResponse.products?.length) continue;
+            // Fetch latest Keepa data
+            // const keepaResponse = await keepaService.fetchProductData(product.product.asin);
+            // if (!keepaResponse.products?.length) continue;
+            // const latest = keepaResponse.products[0];
+            // Update prices
+            // product.product.price = latest.stats.current[0] / 100;
+            // product.product.lastFivePrices.five = latest.stats.avg[0] / 100;
+            // product.product.lastFivePrices.four = latest.stats.avg30[0] / 100;
+            // product.product.lastFivePrices.three = latest.stats.avg90[0] / 100;
+            // product.product.lastFivePrices.two = latest.stats.avg180[0] / 100;
+            // product.product.lastFivePrices.one = latest.stats.avg365[0] / 100;
+            // await product.save();
 
-        const latest = keepaResponse.products[0];
+            // ✅ Pick ONE device token
+            const singleToken = product.userId.fcmToken;
+            const title = "Product Price Update Alert!";
+            const price = product.product.price;
 
-        // Update prices
-        product.product.price = latest.stats.current[0] / 100;
-        product.product.lastFivePrices.five = latest.stats.avg[0] / 100;
-        product.product.lastFivePrices.four = latest.stats.avg30[0] / 100;
-        product.product.lastFivePrices.three = latest.stats.avg90[0] / 100;
-        product.product.lastFivePrices.two = latest.stats.avg180[0] / 100;
-        product.product.lastFivePrices.one = latest.stats.avg365[0] / 100;
+            await sendPushNotification({ fcmToken: singleToken, title, price, });
+        }
 
-        await product.save();
-
-        // ✅ Pick ONE device token
-        const singleToken = product.userId.fcmTokens.at(-1);
-
-        console.log(`...............Push notification send everyday at 12 AM/PM..............`)
-
-        await sendPushNotification(
-            singleToken,
-            product.product.title,
-            product.product,
-            product.userId._id
-        );
-    }
-
-}, { timezone: 'Asia/Dhaka' });
+    }, { timezone: 'Asia/Dhaka' });
 
 /* -------------------------------------------------------------------------- */
 /*                                   EXPORTS                                   */

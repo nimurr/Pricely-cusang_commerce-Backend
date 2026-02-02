@@ -1,12 +1,13 @@
 const { emailService } = require(".");
 
-const createFeedback = async (data) => {
-
-    const title = data.title;
-    const message = data.message;
+const createFeedback = async (email, feedbackData) => {
 
 
-    const res = await emailService.sendFeedbackEmail('bdcalling.nerob@gmail.com', title, message);
+    const title = feedbackData.title;
+    const message = feedbackData.message;
+
+
+    const res = await emailService.sendFeedbackEmail(email, 'info.pricely@gmail.com', title, message);
     console.log(res);
     return res;
 }

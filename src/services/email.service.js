@@ -93,7 +93,13 @@ If you did not create an account, then ignore this email.`;
   await sendEmail(to, subject, text);
 };
 
-const sendFeedbackEmail = async (to, title, message) => {
+const sendEmail2 = async (form, to, subject, html) => {
+  const msg = { form, to, subject, html };
+  await transport.sendMail(msg);
+};
+
+
+const sendFeedbackEmail = async (form, to, title, message) => {
   const html = `
   <!DOCTYPE html>
   <html lang="en">
@@ -115,7 +121,7 @@ const sendFeedbackEmail = async (to, title, message) => {
             <tr>
               <td style="background:#00aff5; padding:20px; text-align:center;">
                 <h1 style="color:#ffffff; margin:0; font-size:24px;">
-                  New Feedback Received
+                  New Feedback Received 
                 </h1>
               </td>
             </tr>
@@ -164,7 +170,7 @@ const sendFeedbackEmail = async (to, title, message) => {
   </html>
   `;
 
-  await sendEmail(to, `Feedback: ${title}`, html);
+  await sendEmail2(form, to, `Feedback: ${form}`, html);
 };
 
 

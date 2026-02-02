@@ -8,7 +8,9 @@ const { sendPushNotification } = require("../utils/pushNotification");
 
 const createNotification = async (fcmToken) => {
 
-    await sendPushNotification(fcmToken);
+    const title = "Product 1 price has dropped!";
+    const price = 10.99;
+    await sendPushNotification({ fcmToken, title, price, });
 
     return fcmToken;
 };
