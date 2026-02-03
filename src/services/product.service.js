@@ -65,6 +65,8 @@ const createProduct = async ({ productUrl, userId }) => {
     const kp = keepaResponse.products[0];
     const { avgRating, reviewCount } = keepaService.extractLatestReviewData(kp);
 
+    console.log(kp)
+
     const getPrice = (v) => (v != null && v !== -1 ? v / 100 : null);
 
     const productData = {
@@ -96,7 +98,7 @@ const createProduct = async ({ productUrl, userId }) => {
     await delRedis("products:all");
     await delRedis(`history:${userId}`);
 
-    return saved;
+    return kp;
 };
 
 
@@ -304,7 +306,7 @@ const removeItemAfter30Day = async (id) => {
 /* -------------------------------------------------------------------------- */
 
 cron.schedule('0 0 0,12 * * *',
-// cron.schedule('*/05 * * * * *',
+    // cron.schedule('*/30 * * * * *',
 
     async () => {
 
@@ -320,6 +322,8 @@ cron.schedule('0 0 0,12 * * *',
             if (!product.userId || !product.userId.fcmToken?.length) continue;
             if (!product?.userId.isPushNotification || !product?.userId?.oneTimePushAcceptedorReject) continue;
             if (!product?.isPushNotification) continue;
+
+            console.log(`---------------------- this time show for only 12AM/PM---------------------`)
 
             // Fetch latest Keepa data
             // const keepaResponse = await keepaService.fetchProductData(product.product.asin);
