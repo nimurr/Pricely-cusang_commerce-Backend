@@ -79,7 +79,7 @@ const createProduct = async ({ productUrl, userId }) => {
             images: kp.imagesCSV ? kp.imagesCSV.split(",") : [],
             imageBaseURL: "https://images-na.ssl-images-amazon.com/images/I/",
             features: kp.features || [],
-            price: getPrice(kp.stats?.current?.[0]),
+            price: getPrice(kp.stats?.current?.[0] || 0) || 0,
             avgRating,
             reviewCount,
             lastFivePrices: {
