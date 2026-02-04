@@ -65,9 +65,8 @@ const createProduct = async ({ productUrl, userId }) => {
     const kp = keepaResponse.products[0];
     const { avgRating, reviewCount } = keepaService.extractLatestReviewData(kp);
 
-    console.log(kp)
 
-    const getPrice = (v) => (v != null && v !== -1 ? v / 100 : null);
+    const getPrice = (v) => (v != null && v !== -1 ? v / 100 : 0);
 
     const productData = {
         userId,
@@ -84,11 +83,11 @@ const createProduct = async ({ productUrl, userId }) => {
             avgRating,
             reviewCount,
             lastFivePrices: {
-                five: getPrice(kp.stats?.current?.[0]),
-                four: getPrice(kp.stats?.avg?.[0]),
-                three: getPrice(kp.stats?.avg30?.[0]),
-                two: getPrice(kp.stats?.avg90?.[0]),
-                one: getPrice(kp.stats?.avg180?.[0]),
+                five: getPrice(kp.stats?.current?.[0] || 0) || 0,
+                four: getPrice(kp.stats?.avg?.[0] || 0) || 0,
+                three: getPrice(kp.stats?.avg30?.[0] || 0) || 0,
+                two: getPrice(kp.stats?.avg90?.[0] || 0) || 0,
+                one: getPrice(kp.stats?.avg180?.[0] || 0) || 0
             }
         }
     };
@@ -362,7 +361,6 @@ module.exports = {
     getProductById,
     deleteProductById,
     deleteHistoryById,
-
     pushNotification,
     ifNotChange7Day,
     removeItemAfter30Day
