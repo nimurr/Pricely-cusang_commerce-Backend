@@ -7,8 +7,8 @@ const productSchema = new mongoose.Schema({
     userId: { type: mongoose.Schema.Types.ObjectId, ref: 'User' },
     isDelete: { type: Boolean, default: false },
     note: { type: String, default: '' },
-    isPushNotification: { type: Boolean, default: false },
-    ifNotChange7Day: { type: Boolean, default: false },
+    isPushNotification: { type: Boolean, default: true },
+    ifNotChange7Day: { type: Boolean, default: true },
     removeItemAfter30Day: { type: Boolean, default: false },
     isPurchased: { type: Boolean, default: false }
 }, { timestamps: true });
