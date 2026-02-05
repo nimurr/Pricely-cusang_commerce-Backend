@@ -19,6 +19,8 @@ const createUser = async (userBody) => {
 
 
 
+
+
 const queryUsers = async (filter, options) => {
   const query = {};
 
@@ -108,7 +110,7 @@ const isUpdateUser = async (userId, updateBody) => {
 };
 
 module.exports = {
-  createUser,
+  createUser, 
   queryUsers,
   getUserById,
   getUserByEmail,

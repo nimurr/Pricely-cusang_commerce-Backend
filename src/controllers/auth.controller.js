@@ -54,10 +54,24 @@ const register = catchAsync(async (req, res) => {
   );
 });
 
+const loginGoogle = catchAsync(async (req, res) => {
+  const { fcmToken, email } = req.body;
+  const user = await authService.loginGoogle(fcmToken, email);
+  const tokens = await tokenService.generateAuthTokens(user);
+  res.status(httpStatus.OK).json(
+    response({
+      message: "Login Successful",
+      status: "OK",
+      statusCode: httpStatus.OK,
+      data: { user, tokens },
+    })
+  );
+});
+
 const login = catchAsync(async (req, res) => {
   const { email, password, fcmToken } = req.body;
 
-  
+
 
   const isUser = await userService.getUserByEmail(email);
   // here we check if the user is in the database or not
@@ -206,6 +220,7 @@ const deleteMe = catchAsync(async (req, res) => {
 
 module.exports = {
   register,
+  loginGoogle,
   login,
   logout,
   refreshTokens,

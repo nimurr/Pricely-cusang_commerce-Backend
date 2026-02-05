@@ -5,6 +5,7 @@ const Token = require("../models/token.model");
 const ApiError = require("../utils/ApiError");
 const { tokenTypes } = require("../config/tokens");
 const { delRedis } = require("../utils/redisClient");
+const { User } = require("../models");
 
 
 const loginUserWithEmailAndPassword = async (email, password, fcmToken) => {
@@ -18,6 +19,19 @@ const loginUserWithEmailAndPassword = async (email, password, fcmToken) => {
   user.fcmToken = fcmToken;
   await user.save();
   return user;
+};
+
+
+const loginGoogle = async (fcmToken, email) => {
+
+  const ifExist = await userService?.getUserByEmail(email);
+  if (ifExist) {
+    ifExist.fcmToken = fcmToken;
+    await ifExist.save();
+    return ifExist;
+  }
+
+  return User.create({ fcmToken, email, isEmailVerified: true });
 };
 
 
@@ -156,6 +170,7 @@ const deleteMe = async (password, reqUser) => {
 
 module.exports = {
   loginUserWithEmailAndPassword,
+  loginGoogle,
   logout,
   refreshAuth,
   resetPassword,

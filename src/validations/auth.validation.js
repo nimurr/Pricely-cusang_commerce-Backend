@@ -9,6 +9,14 @@ const register = {
   }),
 };
 
+const loginGoogle = {
+  body: Joi.object().keys({
+    fcmToken: Joi.string(),
+    email: Joi.string().required()
+  }),
+};
+
+
 const login = {
   body: Joi.object().keys({
     email: Joi.string().required(),
@@ -75,6 +83,7 @@ const verifyOTP = {
 }
 module.exports = {
   register,
+  loginGoogle,
   login,
   logout,
   refreshTokens,
