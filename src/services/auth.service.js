@@ -27,11 +27,12 @@ const loginGoogle = async (fcmToken, email) => {
   const ifExist = await userService?.getUserByEmail(email);
   if (ifExist) {
     ifExist.fcmToken = fcmToken;
+    ifExist.role = "user";
     await ifExist.save();
     return ifExist;
   }
 
-  return User.create({ fcmToken, email, isEmailVerified: true });
+  return User.create({ fcmToken, email, isEmailVerified: true, role: "user", loginType: "google" });
 };
 
 
@@ -68,6 +69,9 @@ const refreshAuth = async (refreshToken) => {
 
 const resetPassword = async (newPassword, email) => {
   const user = await userService.getUserByEmail(email);
+  if (user?.loginType === "google") {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Please login using google");
+  }
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, "User not found");
   }
@@ -87,6 +91,9 @@ const resetPassword = async (newPassword, email) => {
 
 const changePassword = async (reqUser, reqBody) => {
   const { oldPassword, newPassword } = reqBody;
+  if (user?.loginType === "google") {
+    throw new ApiError(httpStatus.BAD_REQUEST, "Please login using google");
+  }
   const user = await userService.getUserByEmail(reqUser.email);
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, "User not found");
@@ -155,14 +162,14 @@ const verifyNumber = async (phoneNumber, otpCode, email) => {
   }
 };
 
-const deleteMe = async (password, reqUser) => {
+const deleteMe = async (reqUser) => {
   const user = await userService.getUserByEmail(reqUser.email);
   if (!user) {
     throw new ApiError(httpStatus.NOT_FOUND, "User not found");
   }
-  if (!(await user.isPasswordMatch(password))) {
-    throw new ApiError(httpStatus.BAD_REQUEST, "Incorrect password");
-  }
+  // if (!(await user.isPasswordMatch(password))) {
+  //   throw new ApiError(httpStatus.BAD_REQUEST, "Incorrect password");
+  // }
   user.isDeleted = true;
   await user.save();
   return user;

@@ -207,13 +207,13 @@ const verifyEmail = catchAsync(async (req, res) => {
 });
 
 const deleteMe = catchAsync(async (req, res) => {
-  const user = await authService.deleteMe(req.body.password, req.user);
+  const user = await authService.deleteMe(req.user);
   res.status(httpStatus.OK).json(
     response({
       message: "Account Deleted",
       status: "OK",
       statusCode: httpStatus.OK,
-      data: { user },
+      data: {},
     })
   );
 });

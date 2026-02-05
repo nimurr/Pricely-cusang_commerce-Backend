@@ -11,6 +11,7 @@ const uploadUsers = userFileUploadMiddleware(UPLOADS_FOLDER_USERS);
 const router = express.Router();
 
 router.post('/register', validate(authValidation.register), authController.register);
+
 router.post('/login-google', validate(authValidation.loginGoogle), authController.loginGoogle);
 
 router.post('/verify-email', validate(authValidation.verifyEmail), authController.verifyEmail);
@@ -21,7 +22,7 @@ router.post('/change-password', auth('common'), validate(authValidation.changePa
 router.post('/logout', validate(authValidation.logout), authController.logout);
 router.post('/refresh-tokens', validate(authValidation.refreshTokens), authController.refreshTokens);
 router.post('/send-verification-email', auth(), authController.sendVerificationEmail);
-router.post('/delete-me', auth('user'), validate(authValidation.deleteMe), authController.deleteMe);
+router.delete('/delete-me', auth('user'), authController.deleteMe);
 
 module.exports = router;
 

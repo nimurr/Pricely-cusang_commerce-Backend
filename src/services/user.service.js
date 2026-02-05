@@ -19,8 +19,6 @@ const createUser = async (userBody) => {
 
 
 
-
-
 const queryUsers = async (filter, options) => {
   const query = {};
 

@@ -136,7 +136,11 @@ const userSchema = mongoose.Schema(
       type: Boolean,
       default: false
     },
-
+    loginType: {
+      type: String,
+      required: false,
+      default: null
+    },
     securitySettings: {
       recoveryEmail: {
         type: String,
