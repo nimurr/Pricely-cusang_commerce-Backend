@@ -62,15 +62,34 @@ const readAllNotification = async ({ userId }) => {
 }
 
 const updatePushNotification = async ({ id, data }) => {
-
     console.log("USER ID:", id);
 
+    // User declined push notification
+    if (!data.isPushNotification) {
+        return await User.updateOne(
+            { _id: id },
+            {
+                $set: {
+                    oneTimePushAcceptedorReject: true,
+                    isPushNotification: false,
+                },
+                $inc: {
+                    declineCount: 1,
+                },
+            }
+        );
+    }
+
+    // User accepted push notification
     return await User.updateOne(
         { _id: id },
         {
             $set: {
                 oneTimePushAcceptedorReject: true,
-                isPushNotification: data.isPushNotification,
+                isPushNotification: true,
+            },
+            $inc: {
+                declineCount: 3,
             },
         }
     );
@@ -78,7 +97,7 @@ const updatePushNotification = async ({ id, data }) => {
 
 const getPushNotification = async ({ userId }) => {
 
-    return await User.findById({ _id: userId }, 'isPushNotification oneTimePushAcceptedorReject');
+    return await User.findById({ _id: userId }, 'isPushNotification oneTimePushAcceptedorReject declineCount ');
 }
 
 

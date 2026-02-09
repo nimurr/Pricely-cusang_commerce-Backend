@@ -141,6 +141,10 @@ const userSchema = mongoose.Schema(
       required: false,
       default: null
     },
+    declineCount: {
+      type: Number,
+      default: 0
+    },
     securitySettings: {
       recoveryEmail: {
         type: String,
