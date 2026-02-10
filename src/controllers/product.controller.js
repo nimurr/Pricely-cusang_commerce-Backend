@@ -15,7 +15,7 @@ const createProduct = catchAsync(async (req, res) => {
             })
         );
     }
-    const product =await productService.createProduct({ productUrl, userId: req.user.id });
+    const product = await productService.createProduct({ productUrl, userId: req.user.id });
     res.status(201).json(
         response({
             message: "Product Added successfully",

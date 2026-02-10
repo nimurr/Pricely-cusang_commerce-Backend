@@ -18,7 +18,7 @@ const createProduct = async ({ productUrl, userId }) => {
 
     // 2️⃣ Limit per user
     const count = await Product.countDocuments({ userId, isDelete: false });
-    if (count > 2) throw new Error("Maximum number (3 item) of products reached");
+    if (count > 2) throw new Error("Du kannst aktuell nur 3 Produkte gleichzeitig beobachten. Entferne zuerst ein Produkt, um ein neues hinzuzufügen.");
 
     // 3️⃣ Expand short Amazon URL safely
     const expandShortAmazonUrl = async (shortUrl) => {
@@ -346,6 +346,9 @@ cron.schedule('0 0 0,12 * * *',
         }
 
     }, { timezone: 'Asia/Dhaka' });
+
+
+
 
 /* -------------------------------------------------------------------------- */
 /*                                   EXPORTS                                  */
