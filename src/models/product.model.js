@@ -9,6 +9,7 @@ const productSchema = new mongoose.Schema({
     note: { type: String, default: '' },
     isPushNotification: { type: Boolean, default: true },
     ifNotChange7Day: { type: Boolean, default: true },
+    currentStatusText: { type: String, default: '' },
     removeItemAfter30Day: { type: Boolean, default: false },
     isPurchased: { type: Boolean, default: false }
 }, { timestamps: true });

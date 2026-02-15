@@ -80,24 +80,29 @@ const createProduct = async ({ productUrl, userId }) => {
             imageBaseURL: "https://images-na.ssl-images-amazon.com/images/I/",
             features: kp.features || [],
             price: getPrice(kp.stats?.current?.[0] || 0) || 0,
+
+            currentStatusText: kp.stats?.current?.[0] == kp.stats?.avg?.[0] && "The price is stable — we’ll no=fy you on real changes.  " || kp.stats?.current?.[0] < kp.stats?.avg?.[0] ? "The price dropped slightly — keep watching." : "The price increased slightly — you may want to wait. ",
+
             avgRating,
             reviewCount,
             lastFivePrices: {
-                five: getPrice(kp.stats?.current?.[0] || 0) || 0,
-                four: getPrice(kp.stats?.avg?.[0] || 0) || 0,
-                three: getPrice(kp.stats?.avg30?.[0] || 0) || 0,
-                two: getPrice(kp.stats?.avg90?.[0] || 0) || 0,
-                one: getPrice(kp.stats?.avg180?.[0] || 0) || 0
+                five: getPrice(kp.stats?.avg?.[0] || 0) || 0,
+                four: getPrice(kp.stats?.avg30?.[0] || 0) || 0,
+                three: getPrice(kp.stats?.avg90?.[0] || 0) || 0,
+                two: getPrice(kp.stats?.avg180?.[0] || 0) || 0,
+                one: getPrice(kp.stats?.avg365?.[0] || 0) || 0
             }
         }
     };
+
+    console.log(productData)
 
     const saved = await Product.create(productData);
 
     await delRedis("products:all");
     await delRedis(`history:${userId}`);
 
-    return kp;
+    return productData;
 };
 
 
@@ -328,14 +333,48 @@ cron.schedule('0 0 0,12 * * *',
             const keepaResponse = await keepaService.fetchProductData(product.product.asin);
             if (!keepaResponse.products?.length) continue;
             const latest = keepaResponse.products[0];
-            // Update prices
-            product.product.price = latest.stats.current[0] / 100;
-            product.product.lastFivePrices.five = latest.stats.avg[0] / 100;
-            product.product.lastFivePrices.four = latest.stats.avg30[0] / 100;
-            product.product.lastFivePrices.three = latest.stats.avg90[0] / 100;
-            product.product.lastFivePrices.two = latest.stats.avg180[0] / 100;
-            product.product.lastFivePrices.one = latest.stats.avg365[0] / 100;
+            const kp = latest;
+
+            // Helper function for status text
+            const getCurrentStatusText = (stats) => {
+                if (!stats?.current?.[0] || !stats?.avg?.[0]) return "No data available";
+
+                if (stats.current[0] === stats.avg[0]) {
+                    return "The price is stable — we’ll notify you on real changes.";
+                } else if (stats.current[0] < stats.avg[0]) {
+                    return "The price dropped slightly — keep watching.";
+                } else {
+                    return "The price increased slightly — you may want to wait.";
+                }
+            };
+
+            // Compute last five prices
+            const lastFivePrices = {
+                five: getPrice(kp.stats?.avg?.[0] || 0) || 0,
+                four: getPrice(kp.stats?.avg30?.[0] || 0) || 0,
+                three: getPrice(kp.stats?.avg90?.[0] || 0) || 0,
+                two: getPrice(kp.stats?.avg180?.[0] || 0) || 0,
+                one: getPrice(kp.stats?.avg365?.[0] || 0) || 0
+            };
+
+            // Compute current status
+            const currentStatusTest = getCurrentStatusText(kp.stats);
+
+            // Update product object
+            product.product.price = kp.stats.current[0] / 100;
+            product.product.lastFivePrices = {
+                five: kp.stats.avg[0] / 100,
+                four: kp.stats.avg30[0] / 100,
+                three: kp.stats.avg90[0] / 100,
+                two: kp.stats.avg180[0] / 100,
+                one: kp.stats.avg365[0] / 100
+            };
+            product.product.currentStatusTest = currentStatusTest;
+            product.product.avgRating = avgRating;
+            product.product.reviewCount = reviewCount;
+
             await product.save();
+
 
             // ✅ Pick ONE device token
             const singleToken = product.userId.fcmToken;
