@@ -56,6 +56,8 @@ const createProduct = async ({ productUrl, userId }) => {
     const exists = await Product.findOne({ "product.asin": asin, userId, isDelete: false });
     if (exists) throw new Error("Product already exists");
 
+    await new Promise(resolve => setTimeout(resolve, 2000));
+
     // 6️⃣ Fetch Keepa
     const keepaResponse = await keepaService.fetchProductData(asin);
     if (!keepaResponse.products?.length) {
