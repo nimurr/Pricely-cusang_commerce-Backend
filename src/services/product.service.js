@@ -93,11 +93,17 @@ const createProduct = async ({ productUrl, userId }) => {
                 three: getPrice(kp.stats?.avg90?.[0] || 0) || 0,
                 two: getPrice(kp.stats?.avg180?.[0] || 0) || 0,
                 one: getPrice(kp.stats?.avg365?.[0] || 0) || 0
+            },
+            lastFiveDates: {
+                five: kp.stats?.avg?.[1] || 0,
+                four: kp.stats?.avg30?.[1] || 0,
+                three: kp.stats?.avg90?.[1] || 0,
+                two: kp.stats?.avg180?.[1] || 0,
+                one: kp.stats?.avg365?.[1] || 0
             }
         }
     };
 
-    console.log(productData)
 
     const saved = await Product.create(productData);
 
@@ -374,6 +380,11 @@ cron.schedule('0 0 0,12 * * *',
                 product.product.currentStatusText = currentStatusText;
 
                 await product.save();
+
+                // 🔥 clear related caches
+                await delRedis("products:all");
+                await delRedis(`product:${product._id}`);
+                await delRedis(`history:${product.userId}`);
 
                 await sendPushNotification({
                     fcmToken: product.userId.fcmToken,
