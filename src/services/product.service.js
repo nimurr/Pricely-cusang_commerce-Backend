@@ -313,81 +313,78 @@ const removeItemAfter30Day = async (id) => {
 
 cron.schedule('0 0 0,12 * * *',
     // cron.schedule('*/30 * * * * *',
-
     async () => {
 
-        // return
         const products = await Product
             .find({ isDelete: false })
             .populate('userId', 'fcmToken isPushNotification oneTimePushAcceptedorReject');
 
-        // console.log(products)
-
-
         for (const product of products) {
-            if (!product.userId || !product.userId.fcmToken?.length) continue;
-            if (!product?.userId.isPushNotification || !product?.userId?.oneTimePushAcceptedorReject) continue;
+
+            if (!product?.userId?.fcmToken) continue;
+            if (!product?.userId?.isPushNotification) continue;
+            if (!product?.userId?.oneTimePushAcceptedorReject) continue;
             if (!product?.isPushNotification) continue;
 
-            console.log(`---------------------- this time show for only 12AM/PM---------------------`)
-
-            // Fetch latest Keepa data
             const keepaResponse = await keepaService.fetchProductData(product.product.asin);
-            if (!keepaResponse.products?.length) continue;
-            const latest = keepaResponse.products[0];
-            const kp = latest;
+            if (!keepaResponse?.products?.length) continue;
 
-            // Helper function for status text
-            const getCurrentStatusText = (stats) => {
-                if (!stats?.current?.[0] || !stats?.avg?.[0]) return "No data available";
+            const kp = keepaResponse.products[0];
+            if (!kp?.stats?.current?.[0]) continue;
 
-                if (stats.current[0] === stats.avg[0]) {
-                    return "The price is stable — we’ll notify you on real changes.";
-                } else if (stats.current[0] < stats.avg[0]) {
-                    return "The price dropped slightly — keep watching.";
-                } else {
-                    return "The price increased slightly — you may want to wait.";
+            const newPrice = kp.stats.current[0] / 100;
+            const oldPrice = product.product.price;
+
+            // ✅ ONLY IF PRICE CHANGED
+            if (newPrice !== oldPrice) {
+
+                const current = kp.stats?.current?.[0];
+                const avg = kp.stats?.avg?.[0];
+
+                let currentStatusText = "No data available";
+                let title = "Product Price Update Alert!";
+
+                if (current && avg) {
+
+                    if (current === avg) {
+                        currentStatusText = "The price is stable — we’ll notify you on real changes.";
+                    }
+                    else if (current < avg) {
+                        currentStatusText = "The price dropped slightly — keep watching.";
+                        title = "Price Dropped! 🔻";   // ✅ Special title when price goes down
+                    }
+                    else {
+                        currentStatusText = "The price increased slightly — you may want to wait.";
+                        title = "Price Increased 🔺";
+                    }
                 }
-            };
 
-            // Compute last five prices
-            const lastFivePrices = {
-                five: getPrice(kp.stats?.avg?.[0] || 0) || 0,
-                four: getPrice(kp.stats?.avg30?.[0] || 0) || 0,
-                three: getPrice(kp.stats?.avg90?.[0] || 0) || 0,
-                two: getPrice(kp.stats?.avg180?.[0] || 0) || 0,
-                one: getPrice(kp.stats?.avg365?.[0] || 0) || 0
-            };
+                console.log(`Price changed for ${product.product.asin}`);
 
-            // Compute current status
-            const currentStatusTest = getCurrentStatusText(kp.stats);
+                product.product.price = newPrice;
 
-            // Update product object
-            product.product.price = kp.stats.current[0] / 100;
-            product.product.lastFivePrices = {
-                five: kp.stats.avg[0] / 100,
-                four: kp.stats.avg30[0] / 100,
-                three: kp.stats.avg90[0] / 100,
-                two: kp.stats.avg180[0] / 100,
-                one: kp.stats.avg365[0] / 100
-            };
-            product.product.currentStatusTest = currentStatusTest;
-            product.product.avgRating = avgRating;
-            product.product.reviewCount = reviewCount;
+                product.product.lastFivePrices = {
+                    five: kp?.stats?.avg?.[0] ? kp.stats.avg[0] / 100 : null,
+                    four: kp?.stats?.avg30?.[0] ? kp.stats.avg30[0] / 100 : null,
+                    three: kp?.stats?.avg90?.[0] ? kp.stats.avg90[0] / 100 : null,
+                    two: kp?.stats?.avg180?.[0] ? kp.stats.avg180[0] / 100 : null,
+                    one: kp?.stats?.avg365?.[0] ? kp.stats.avg365[0] / 100 : null
+                };
 
-            await product.save();
+                product.product.currentStatusText = currentStatusText;
 
+                await product.save();
 
-            // ✅ Pick ONE device token
-            const singleToken = product.userId.fcmToken;
-            const title = "Product Price Update Alert!";
-            const price = product.product.price;
+                await sendPushNotification({
+                    fcmToken: product.userId.fcmToken,
+                    title,
+                    price: newPrice,
+                });
+            }
 
-            await sendPushNotification({ fcmToken: singleToken, title, price, });
         }
 
     }, { timezone: 'Asia/Dhaka' });
-
 
 
 
