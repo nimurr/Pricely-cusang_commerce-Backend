@@ -61,6 +61,7 @@ const verifyEmail = {
   body: Joi.object().keys({
     email: Joi.string().required(),
     code: Joi.string().required(),
+    fcmToken: Joi.string(),
   }),
 };
 

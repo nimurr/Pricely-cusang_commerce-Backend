@@ -35,7 +35,7 @@ class KeepaService {
         try {
             const response = await axios.get(this.baseUrl, { params });
             return response.data;
-        } catch (error) {  
+        } catch (error) {
             throw new Error("Keepa API unavailable. Try again later.");
         }
     }

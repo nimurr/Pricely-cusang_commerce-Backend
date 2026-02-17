@@ -14,7 +14,9 @@ router.post('/register', validate(authValidation.register), authController.regis
 
 router.post('/login-google', validate(authValidation.loginGoogle), authController.loginGoogle);
 
-router.post('/verify-email', validate(authValidation.verifyEmail), authController.verifyEmail);
+router.post('/verify-email',
+    validate(authValidation.verifyEmail),
+    authController.verifyEmail);
 router.post('/login', validate(authValidation.login), authController.login);
 router.post('/forgot-password', validate(authValidation.forgotPassword), authController.forgotPassword);
 router.post('/reset-password', validate(authValidation.resetPassword), authController.resetPassword);

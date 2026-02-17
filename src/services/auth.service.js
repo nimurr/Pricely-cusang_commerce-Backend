@@ -113,10 +113,15 @@ const changePassword = async (reqUser, reqBody) => {
 };
 
 const verifyEmail = async (reqBody, reqQuery) => {
-  const { email, code: oneTimeCode } = reqBody;
+  const { email, code: oneTimeCode, fcmToken } = reqBody;
   console.log("reqBody", email);
   console.log("reqQuery", oneTimeCode);
+
+
   const user = await userService.getUserByEmail(email);
+
+
+
 
   // if(user.oneTimeCode === 'verified'){
   //   throw new ApiError(
@@ -135,6 +140,7 @@ const verifyEmail = async (reqBody, reqQuery) => {
   } else {
     user.isEmailVerified = true;
     user.oneTimeCode = null;
+    user.fcmToken = fcmToken;
     // user.isResetPassword = false;
     await user.save();
     return user;
