@@ -11,6 +11,7 @@ const productSchema = new mongoose.Schema({
     ifNotChange7Day: { type: Boolean, default: true },
     currentStatusText: { type: String, default: '' },
     removeItemAfter30Day: { type: Boolean, default: false },
+    alternativeProducts: { type: Array, default: [] },
     isPurchased: { type: Boolean, default: false }
 }, { timestamps: true });
 

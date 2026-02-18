@@ -55,6 +55,7 @@ const addNote = catchAsync(async (req, res) => {
 const markAsPurchased = catchAsync(async (req, res) => {
     const id = req.params.id;
     const product = await productService.markAsPurchased(id);
+
     res.status(201).json(
         response({
             message: "Product Marked as Purchased successfully",
@@ -238,6 +239,27 @@ const removeItemAfter30Day = catchAsync(async (req, res) => {
     );
 });
 
+const testLast7Day = catchAsync(async (req, res) => {
+    const product = await productService.testLast7Day(req.params.id);
+    if (!product) {
+        return res.status(404).json(
+            response({
+                message: "Product not found",
+                status: "NOT_FOUND",
+                statusCode: httpStatus.NOT_FOUND,
+            })
+        );
+    }
+    res.status(200).json(
+        response({
+            message: " Test Last 7 Day !",
+            status: "OK",
+            statusCode: httpStatus.OK,
+            data: product,
+        })
+    );
+});
+
 
 
 
@@ -254,5 +276,7 @@ module.exports = {
 
     pushNotification,
     ifNotChange7Day,
-    removeItemAfter30Day
+    removeItemAfter30Day,
+
+    testLast7Day
 };  

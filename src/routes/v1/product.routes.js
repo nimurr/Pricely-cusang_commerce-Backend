@@ -51,4 +51,6 @@ router.patch('/if-not-change-7-day/:id', auth('user'), productController.ifNotCh
 //     "removeItemAfter30Day": false,
 router.patch('/remove-item-after-30-day/:id', auth('user'), productController.removeItemAfter30Day);
 
+router.post('/test-last-7-day/:id', productController.testLast7Day);
+
 module.exports = router;

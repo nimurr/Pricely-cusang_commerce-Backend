@@ -4,6 +4,9 @@ const { Product } = require("../models");
 const keepaService = require("./keepa.service");
 const { setRedis, getRedis, delRedis } = require("../utils/redisClient");
 const { sendPushNotification } = require("../utils/pushNotification");
+const savenDayKeepa = require("./savenDayKeepa.service");
+const ApiError = require("../utils/ApiError");
+const httpStatus = require("http-status");
 
 // ============================================
 // productController.js or wherever createProduct is - UPDATED
@@ -11,14 +14,14 @@ const { sendPushNotification } = require("../utils/pushNotification");
 const createProduct = async ({ productUrl, userId }) => {
     if (!productUrl) throw new Error("Product URL is required");
 
-    // 1️⃣ Extract clean https URL from messy string
+    // 1️⃣ Extract clean https URL
     const urlMatch = productUrl.match(/https:\/\/[^\s]+/);
     if (!urlMatch) throw new Error("No valid https URL found");
     productUrl = urlMatch[0].trim();
 
     // 2️⃣ Limit per user
     const count = await Product.countDocuments({ userId, isDelete: false });
-    if (count > 2) throw new Error("Du kannst aktuell nur 3 Produkte gleichzeitig beobachten. Entferne zuerst ein Produkt, um ein neues hinzuzufügen.");
+    if (count > 2) throw new Error("You can only track 3 products simultaneously. Remove one first.");
 
     // 3️⃣ Expand short Amazon URL safely
     const expandShortAmazonUrl = async (shortUrl) => {
@@ -26,16 +29,13 @@ const createProduct = async ({ productUrl, userId }) => {
             const response = await axios.get(shortUrl, {
                 maxRedirects: 5,
                 timeout: 8000,
-                headers: {
-                    "User-Agent": "Mozilla/5.0"
-                },
+                headers: { "User-Agent": "Mozilla/5.0" },
                 validateStatus: (status) => status >= 200 && status < 400
             });
-
             return response.request?.res?.responseUrl || shortUrl;
         } catch (err) {
             console.error("Short URL expand failed:", err.message);
-            return shortUrl; // fail silently
+            return shortUrl;
         }
     };
 
@@ -43,13 +43,9 @@ const createProduct = async ({ productUrl, userId }) => {
         productUrl = await expandShortAmazonUrl(productUrl);
     }
 
-    // 4️⃣ Extract ASIN (dp OR gp/product)
-    const asinMatch = productUrl.match(
-        /\/dp\/([A-Z0-9]{10})|\/gp\/product\/([A-Z0-9]{10})/
-    );
-
+    // 4️⃣ Extract ASIN
+    const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})|\/gp\/product\/([A-Z0-9]{10})/);
     if (!asinMatch) throw new Error("Invalid Amazon product URL");
-
     const asin = asinMatch[1] || asinMatch[2];
 
     // 5️⃣ Prevent duplicate
@@ -58,18 +54,63 @@ const createProduct = async ({ productUrl, userId }) => {
 
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // 6️⃣ Fetch Keepa
+    // 6️⃣ Fetch Keepa data
     const keepaResponse = await keepaService.fetchProductData(asin);
-    if (!keepaResponse.products?.length) {
-        throw new Error("Keepa returned no product data");
-    }
-
+    if (!keepaResponse.products?.length) throw new Error("Keepa returned no product data");
     const kp = keepaResponse.products[0];
     const { avgRating, reviewCount } = keepaService.extractLatestReviewData(kp);
 
-
+    // 7️⃣ Helpers
     const getPrice = (v) => (v != null && v !== -1 ? v / 100 : 0);
 
+    const keepaTimeToDate = (keepaMinutes) => {
+        const keepaStart = new Date("2011-01-01T00:00:00Z").getTime();
+        return new Date(keepaStart + keepaMinutes * 60 * 1000);
+    };
+
+    const extractLastFivePriceChanges = (kp) => {
+        const amazonHistory = kp.csv?.[0];
+        if (!amazonHistory || amazonHistory.length < 2) return [];
+
+        const changes = [];
+        let lastPrice = null;
+
+        for (let i = 0; i < amazonHistory.length; i += 2) {
+            const keepaTime = amazonHistory[i];
+            const rawPrice = amazonHistory[i + 1];
+            if (rawPrice === -1 || rawPrice == null) continue;
+
+            const price = rawPrice / 100;
+            if (lastPrice === null || price !== lastPrice) {
+                changes.push({
+                    date: keepaTimeToDate(keepaTime),
+                    price
+                });
+                lastPrice = price;
+            }
+        }
+
+        return changes.slice(-5).reverse();
+    };
+
+
+
+    const currentPrice = getPrice(kp.stats?.current?.[0]);
+
+
+
+    // 9️⃣ Extract price history
+    const priceHistory = extractLastFivePriceChanges(kp);
+
+
+    const lowestPrice = priceHistory.length
+        ? Math.min(...priceHistory.map(p => p.price))
+        : currentPrice || 0;
+
+    // Get previous price (most recent before current)
+    const previousPrice = priceHistory.length ? priceHistory[0].price : currentPrice || 0;
+
+    // 10️⃣ Prepare product data
     const productData = {
         userId,
         url: productUrl,
@@ -81,37 +122,38 @@ const createProduct = async ({ productUrl, userId }) => {
             images: kp.imagesCSV ? kp.imagesCSV.split(",") : [],
             imageBaseURL: "https://images-na.ssl-images-amazon.com/images/I/",
             features: kp.features || [],
-            price: getPrice(kp.stats?.current?.[0] || 0) || 0,
-
-            currentStatusText: kp.stats?.current?.[0] == kp.stats?.avg?.[0] && "The price is stable — we’ll no=fy you on real changes.  " || kp.stats?.current?.[0] < kp.stats?.avg?.[0] ? "The price dropped slightly — keep watching." : "The price increased slightly — you may want to wait. ",
-
+            price: currentPrice,
             avgRating,
             reviewCount,
-            lastFivePrices: {
-                five: getPrice(kp.stats?.avg?.[0] || 0) || 0,
-                four: getPrice(kp.stats?.avg30?.[0] || 0) || 0,
-                three: getPrice(kp.stats?.avg90?.[0] || 0) || 0,
-                two: getPrice(kp.stats?.avg180?.[0] || 0) || 0,
-                one: getPrice(kp.stats?.avg365?.[0] || 0) || 0
-            },
-            lastFiveDates: {
-                five: kp.stats?.avg?.[1] || 0,
-                four: kp.stats?.avg30?.[1] || 0,
-                three: kp.stats?.avg90?.[1] || 0,
-                two: kp.stats?.avg180?.[1] || 0,
-                one: kp.stats?.avg365?.[1] || 0
-            }
+            priceHistory,
+            lowestPrice,
+            previousPrice,
+            type: kp.type,
         }
     };
 
+    let currentStatusText = "No data available";
+    let title = "Product Price Update Alert!";
 
-    const saved = await Product.create(productData);
 
-    await delRedis("products:all");
-    await delRedis(`history:${userId}`);
+    if (productData?.product?.price && productData?.product?.priceHistory[0]?.price) {
+        if (productData?.product?.price === productData?.product?.priceHistory[0]?.price) {
+            currentStatusText = "The price is stable.";
+        } else if (productData?.product?.price < productData?.product?.priceHistory[0]?.price) {
+            currentStatusText = "The price dropped slightly.";
+            title = "Price Dropped! 🔻";
+        } else if (productData?.product?.price > productData?.product?.priceHistory[0]?.price) {
+            currentStatusText = "The price increased slightly.";
+            title = "Price Increased 🔺";
+        }
+    }
+    productData.product.currentStatusText = currentStatusText;
+
+    await Product.create(productData);
 
     return productData;
 };
+
 
 
 
@@ -134,8 +176,7 @@ const isMyProduct = async (userId) => {
 const addNote = async (id, note) => {
     const product = await Product.findByIdAndUpdate(id, { note }, { new: true });
     if (!product) throw new Error("Product not found");
-    await delRedis(`product:${id}`);
-    await delRedis("products:all");
+
     return product;
 };
 
@@ -150,9 +191,7 @@ const markAsPurchased = async (id) => {
         { new: true }
     );
     if (!product) throw new Error("Product not found");
-    await delRedis("products:all");
-    await delRedis(`product:${id}`);
-    await delRedis(`history:${product.userId}`);
+
     return product;
 };
 
@@ -161,88 +200,140 @@ const markAsPurchased = async (id) => {
 /* -------------------------------------------------------------------------- */
 
 const getProducts = async (userId) => {
-    const cacheKey = "products:all";
-    const cached = await getRedis(cacheKey);
-    if (cached) {
-        return cached
-    };
-    const products = await Product.find({ userId, isDelete: false })
-        // .sort({ createdAt: -1 })
-        .lean();
-    if (!products.length) throw new Error("No products found");
-    const response = products.map(p => {
-        const five = p.product.lastFivePrices.five;
-        const current = p.product.price;
-        p.product.percentageChange = five
-            ? (((current - five) / five) * 100).toFixed(2)
-            : "0.00";
 
-        return p;
-    });
-    await setRedis(cacheKey, response, 300);
-    return response;
+
+    const products = await Product.find({
+        userId,
+        isDelete: false,
+        isPurchased: false
+    }).lean();
+
+    if (!products.length) {
+        new ApiError(httpStatus.NOT_FOUND, "No products found");
+    };
+
+    // const response = products.map(p => {
+
+    //     const current = p.product?.price || 0;
+    //     let basePrice = current;
+
+    //     // pick the oldest price from priceHistory
+    //     if (p.product?.priceHistory?.length) {
+    //         const oldest = p.product.priceHistory.reduce((a, b) =>
+    //             new Date(a.date) < new Date(b.date) ? a : b
+    //         );
+    //         basePrice = oldest?.price || current;
+    //     }
+
+    //     const percent = basePrice ? ((current - basePrice) / basePrice) * 100 : 0;
+
+    //     p.product.percentageChange = percent.toFixed(2);
+
+    //     // 🔥 Format priceHistory with readable dates
+    //     p.product.priceHistory = (p.product.priceHistory || []).map(item => ({
+    //         price: item.price,
+    //         date: item.date
+    //             ? new Date(item.date).toISOString()   // ISO format
+    //             : null
+    //     }));
+
+    //     return p;
+    // });
+
+    return products;
 };
+
 
 /* -------------------------------------------------------------------------- */
 /*                                 GET HISTORY                                */
 /* -------------------------------------------------------------------------- */
 
 const getHistory = async (userId) => {
-    const cacheKey = `history:${userId}`;
-    const cached = await getRedis(cacheKey);
-    if (cached) return cached;
+
+
+
+
     const products = await Product.find({
         userId,
         isDelete: true
-    }).sort({ createdAt: -1 }).lean();
+    })
+        .sort({ createdAt: -1 })
+        .lean();
+
     let totalDifference = 0;
+
     const response = products.map(p => {
-        if (p.isPurchased) {
-            const diff = p.product.price - (p.product.lastFivePrices.five || 0);
+
+        if (p.isPurchased && p.product?.priceHistory?.length) {
+
+            // 🔥 Get oldest price from history
+            const oldestEntry = p.product.priceHistory[p.product.priceHistory.length - 1];
+
+            const oldPrice = oldestEntry?.price || 0;
+            const currentPrice = p.product.price || 0;
+
+            const diff = currentPrice - oldPrice;
+
             p.product.saveAmount = Number(diff.toFixed(2));
+
             totalDifference += diff;
-        } else {
+        }
+        else {
             p.product.saveAmount = 0;
         }
+
         return p;
     });
+
     const data = {
         totalDifference: Number(totalDifference.toFixed(2)),
         products: response
     };
-    await setRedis(cacheKey, data, 300);
+
+
     return data;
 };
+
 
 /* -------------------------------------------------------------------------- */
 /*                              GET PRODUCT BY ID                              */
 /* -------------------------------------------------------------------------- */
 
 const getProductById = async (id) => {
-    // const cacheKey = `product:${id}`;
-    // const cached = await getRedis(cacheKey);
-    // if (cached) return cached;
     const product = await Product.findById(id).lean();
     if (!product) throw new Error("Product not found");
 
-    const prices = Object.values(product.product.lastFivePrices)
-        .filter(p => p != null);
-    product.product.lowestPrice =
-        prices.length ? Math.min(...prices) : null;
+    const current = product.product.price || 0;
+    let basePrice = current;
 
-    const five = product.product.lastFivePrices.five;
-    const current = product.product.price;
+    if (product.product?.priceHistory?.length) {
+        // Sort priceHistory by date ascending (oldest first)
+        const sortedHistory = product.product.priceHistory.sort(
+            (a, b) => new Date(a.date) - new Date(b.date)
+        );
 
-    const percentageChange =
-        five && five !== 0
-            ? (((current - five) / five) * 100).toFixed(2)
-            : "0.00";
+        // Use the first recorded price as the base
+        const oldest = sortedHistory[0];
+        basePrice = oldest?.price || current;
+    }
 
-    product.product.percentageChange = percentageChange;
+    // Calculate percentage change based on first price
+    const percentageChange = basePrice
+        ? ((current - basePrice) / basePrice) * 100
+        : 0;
 
-    // await setRedis(cacheKey, product, 300);
+    product.product.percentageChange = percentageChange.toFixed(2);
+
+    // Trend indicator based on percentage
+    product.product.trend =
+        percentageChange < 0 ? "down" :
+            percentageChange > 0 ? "up" :
+                "stable";
+
     return product;
 };
+
+
 
 /* -------------------------------------------------------------------------- */
 /*                                  DELETE                                     */
@@ -250,19 +341,12 @@ const getProductById = async (id) => {
 
 const deleteProductById = async (id) => {
     const product = await Product.findByIdAndUpdate(id, { isDelete: true });
-    if (product) {
-        await delRedis("products:all");
-        await delRedis(`product:${id}`);
-        await delRedis(`history:${product.userId}`);
-    }
     return product;
 };
 
 const deleteHistoryById = async (id) => {
     const product = await Product.findByIdAndDelete(id)
-    await delRedis("products:all");
-    await delRedis(`product:${id}`);
-    await delRedis(`history:${product.userId}`);
+
     return product;
 };
 
@@ -273,10 +357,6 @@ const pushNotification = async (id) => {
     product.isPushNotification = !product.isPushNotification;
     await product.save();
 
-    // 🔥 clear related caches
-    await delRedis("products:all");
-    await delRedis(`product:${id}`);
-    await delRedis(`history:${product.userId}`);
 
     return product;
 };
@@ -288,10 +368,6 @@ const ifNotChange7Day = async (id) => {
     product.ifNotChange7Day = !product.ifNotChange7Day;
     await product.save();
 
-    // 🔥 clear related caches
-    await delRedis("products:all");
-    await delRedis(`product:${id}`);
-    await delRedis(`history:${product.userId}`);
 
     return product;
 }
@@ -304,29 +380,159 @@ const removeItemAfter30Day = async (id) => {
     product.removeItemAfter30Day = !product.removeItemAfter30Day;
     await product.save();
 
-    // 🔥 clear related caches
-    await delRedis("products:all");
-    await delRedis(`product:${id}`);
-    await delRedis(`history:${product.userId}`);
+
 
     return product;
 };
+
+const testLast7Day = async (id) => {
+
+    const product = await Product.findById(id);
+    if (!product) throw new Error("Product not found");
+
+    const alternates = await savenDayKeepa.getAlternateProductsByCategory(product.product.asin, product.product.type, 3);
+
+    console.log(alternates)
+
+    // Merge with existing alternativeProducts
+    const existingAlternates = product.alternativeProducts || [];
+
+    // Avoid duplicates by ASIN
+    const mergedAlternates = [...existingAlternates];
+
+    alternates.forEach(alt => {
+        if (!mergedAlternates.find(a => a.asin === alt.asin)) {
+            mergedAlternates.push(alt);
+        }
+    });
+
+    // Save updated array to DB
+    await Product.findByIdAndUpdate(product._id, {
+        $set: { alternativeProducts: mergedAlternates }
+    });
+
+    console.log(`Added ${alternates.length} alternate products for ASIN: ${product.product.asin}`);
+
+    return product;
+
+}
 
 
 /* -------------------------------------------------------------------------- */
 /*                        CRON For Push Notification                          */
 /* -------------------------------------------------------------------------- */
 
-cron.schedule('0 0 0,12 * * *',
-    // cron.schedule('*/30 * * * * *',
-    async () => {
+function convertKeepaMinutesToDate(keepaMinutes) {
+    if (!keepaMinutes) return null;
 
+    const KEEP_EPOCH = new Date('2011-01-01T00:00:00Z').getTime();
+    const realDate = new Date(KEEP_EPOCH + keepaMinutes * 60 * 1000);
+
+    return realDate;
+}
+
+// cron.schedule('0 0 0,12 * * *', async () => {
+//     console.log("Cron job started...");
+
+//     try {
+//         const products = await Product
+//             .find({ isDelete: false })
+//             .populate('userId', 'fcmToken isPushNotification oneTimePushAcceptedorReject');
+
+//         for (const product of products) {
+
+//             // Skip users/products where push is not allowed
+//             if (!product?.userId?.fcmToken) continue;
+//             if (!product?.userId?.isPushNotification) continue;
+//             if (!product?.userId?.oneTimePushAcceptedorReject) continue;
+//             if (!product?.isPushNotification) continue;
+
+//             const keepaResponse = await keepaService.fetchProductData(product.product.asin);
+//             if (!keepaResponse?.products?.length) continue;
+
+//             const kp = keepaResponse.products[0];
+//             if (!kp?.stats?.current?.[0]) continue;
+
+//             const newPrice = kp.stats.current[0] / 100;
+//             const oldPrice = product.product.price;
+
+//             // ✅ Only update if price changed
+//             if (newPrice !== oldPrice) {
+
+//                 console.log(`Price changed for ASIN: ${product.product.asin}`);
+
+//                 const current = kp.stats?.current?.[0];
+//                 const avg = kp.stats?.avg?.[0];
+
+//                 let currentStatusText = "No data available";
+//                 let title = "Product Price Update Alert!";
+
+//                 if (current && avg) {
+//                     if (current === avg) {
+//                         currentStatusText = "The price is stable.";
+//                     } else if (current < avg) {
+//                         currentStatusText = "The price dropped slightly.";
+//                         title = "Price Dropped! 🔻";
+//                     } else {
+//                         currentStatusText = "The price increased slightly.";
+//                         title = "Price Increased 🔺";
+//                     }
+//                 }
+
+//                 // Convert Keepa timestamp to real date
+//                 const keepaLastUpdate = kp.stats?.current[1];
+//                 const realDate = convertKeepaMinutesToDate(keepaLastUpdate);
+
+//                 // Update product price
+//                 product.product.price = newPrice;
+//                 product.product.currentStatusText = currentStatusText;
+
+//                 // 🔹 Update priceHistory
+//                 if (!Array.isArray(product.product.priceHistory)) {
+//                     product.product.priceHistory = [];
+//                 }
+
+//                 product.product.priceHistory.push({
+//                     price: newPrice,
+//                     date: realDate
+//                 });
+
+//                 // Optional: Keep last 50 entries only
+//                 if (product.product.priceHistory.length > 50) {
+//                     product.product.priceHistory = product.product.priceHistory.slice(-50);
+//                 }
+
+//                 await product.save();
+
+
+//                 // Send push notification
+//                 await sendPushNotification({
+//                     fcmToken: product.userId.fcmToken,
+//                     title,
+//                     price: newPrice,
+//                     date: realDate
+//                 });
+//             }
+//         }
+
+//         console.log("Cron job completed.");
+//     } catch (error) {
+//         console.error("Cron error:", error);
+//     }
+
+// }, { timezone: 'Asia/Dhaka' });
+
+cron.schedule('0 0 0,12 * * *', async () => {
+    console.log("Cron job started...");
+
+    try {
         const products = await Product
             .find({ isDelete: false })
             .populate('userId', 'fcmToken isPushNotification oneTimePushAcceptedorReject');
 
         for (const product of products) {
 
+            // 🔹 Skip users/products where push not allowed
             if (!product?.userId?.fcmToken) continue;
             if (!product?.userId?.isPushNotification) continue;
             if (!product?.userId?.oneTimePushAcceptedorReject) continue;
@@ -341,8 +547,10 @@ cron.schedule('0 0 0,12 * * *',
             const newPrice = kp.stats.current[0] / 100;
             const oldPrice = product.product.price;
 
-            // ✅ ONLY IF PRICE CHANGED
+            // ✅ Only continue if price changed
             if (newPrice !== oldPrice) {
+
+                console.log(`Price changed for ASIN: ${product.product.asin}`);
 
                 const current = kp.stats?.current?.[0];
                 const avg = kp.stats?.avg?.[0];
@@ -351,53 +559,146 @@ cron.schedule('0 0 0,12 * * *',
                 let title = "Product Price Update Alert!";
 
                 if (current && avg) {
-
                     if (current === avg) {
-                        currentStatusText = "The price is stable — we’ll notify you on real changes.";
-                    }
-                    else if (current < avg) {
-                        currentStatusText = "The price dropped slightly — keep watching.";
-                        title = "Price Dropped! 🔻";   // ✅ Special title when price goes down
-                    }
-                    else {
-                        currentStatusText = "The price increased slightly — you may want to wait.";
+                        currentStatusText = "The price is stable.";
+                    } else if (current < avg) {
+                        currentStatusText = "The price dropped slightly.";
+                        title = "Price Dropped! 🔻";
+                    } else {
+                        currentStatusText = "The price increased slightly.";
                         title = "Price Increased 🔺";
                     }
                 }
 
-                console.log(`Price changed for ${product.product.asin}`);
+                // 🔹 Convert Keepa timestamp
+                const keepaLastUpdate = kp.stats?.current?.[1];
+                const realDate = convertKeepaMinutesToDate(keepaLastUpdate);
 
+                // 🔹 Ensure priceHistory exists
+                if (!Array.isArray(product.product.priceHistory)) {
+                    product.product.priceHistory = [];
+                }
+
+                // 🔹 Add new price entry
+                product.product.priceHistory.unshift({
+                    price: newPrice,
+                    date: realDate
+                });
+
+                // 🔹 Keep only last 50 entries
+                if (product.product.priceHistory.length > 5) {
+                    product.product.priceHistory =
+                        product.product.priceHistory.slice(0, 5);
+                }
+
+                const priceHistory = product.product.priceHistory;
+                const currentPrice = newPrice;
+
+                // ✅ Calculate lowest price (your method)
+                const lowestPrice = priceHistory.length
+                    ? Math.min(...priceHistory.map(p => p.price))
+                    : currentPrice || 0;
+
+                // ✅ Calculate previous price (your method)
+                const previousPrice = priceHistory.length > 1
+                    ? priceHistory[1].price   // because index 0 is current (we used unshift)
+                    : currentPrice || 0;
+
+                // 🔹 Update product fields
                 product.product.price = newPrice;
-
-                product.product.lastFivePrices = {
-                    five: kp?.stats?.avg?.[0] ? kp.stats.avg[0] / 100 : null,
-                    four: kp?.stats?.avg30?.[0] ? kp.stats.avg30[0] / 100 : null,
-                    three: kp?.stats?.avg90?.[0] ? kp.stats.avg90[0] / 100 : null,
-                    two: kp?.stats?.avg180?.[0] ? kp.stats.avg180[0] / 100 : null,
-                    one: kp?.stats?.avg365?.[0] ? kp.stats.avg365[0] / 100 : null
-                };
-
+                product.product.lowestPrice = lowestPrice;
+                product.product.previousPrice = previousPrice;
                 product.product.currentStatusText = currentStatusText;
 
                 await product.save();
 
-                // 🔥 clear related caches
-                await delRedis("products:all");
-                await delRedis(`product:${product._id}`);
-                await delRedis(`history:${product.userId}`);
-
+                // 🔹 Send push notification
                 await sendPushNotification({
                     fcmToken: product.userId.fcmToken,
                     title,
                     price: newPrice,
+                    previousPrice,
+                    lowestPrice,
+                    date: realDate
                 });
             }
-
         }
 
-    }, { timezone: 'Asia/Dhaka' });
+        console.log("Cron job completed.");
+
+    } catch (error) {
+        console.error("Cron error:", error);
+    }
+
+}, { timezone: 'Asia/Dhaka' });
 
 
+
+
+/* -------------------------------------------------------------------------- */
+/*         Last 7 day if price not changed then add more alternate 3 products       */
+/* -------------------------------------------------------------------------- */
+
+
+function priceChangedInLast7Days(priceHistory) {
+    if (!Array.isArray(priceHistory) || priceHistory.length < 2) return false;
+
+    const now = new Date();
+    const sevenDaysAgo = new Date(now);
+    sevenDaysAgo.setDate(now.getDate() - 7);
+
+    const recentHistory = priceHistory.filter(h => new Date(h.date) >= sevenDaysAgo);
+    if (recentHistory.length < 2) return false;
+
+    const prices = recentHistory.map(h => h.price);
+    const firstPrice = prices[0];
+    return prices.some(price => price !== firstPrice);
+}
+
+cron.schedule('0 0 0,12 * * *', async () => {
+    console.log("Checking products for 7-day price inactivity...");
+
+    try {
+        const products = await Product.find({ isDelete: false, isPurchased: false });
+
+        for (const product of products) {
+            const priceHistory = product.product?.priceHistory || [];
+
+            if (priceChangedInLast7Days(priceHistory)) continue;
+
+            console.log(`Product ASIN ${product.product.asin} has not changed in 7 days.`);
+
+            // Fetch 3 alternate products
+            const alternates = await savenDayKeepa.getAlternateProducts(product.product.asin, 3);
+
+            if (alternates.length === 0) continue;
+
+            // Merge with existing alternativeProducts
+            const existingAlternates = product.alternativeProducts || [];
+
+            // Avoid duplicates by ASIN
+            const mergedAlternates = [...existingAlternates];
+
+            alternates.forEach(alt => {
+                if (!mergedAlternates.find(a => a.asin === alt.asin)) {
+                    mergedAlternates.push(alt);
+                }
+            });
+
+            // Save updated array to DB
+            await Product.findByIdAndUpdate(product._id, {
+                $set: { alternativeProducts: mergedAlternates }
+            });
+
+
+            console.log(`Added ${alternates.length} alternate products for ASIN: ${product.product.asin}`);
+        }
+
+        console.log("7-day alternate check completed.");
+    } catch (err) {
+        console.error("Error in cron:", err);
+    }
+}, { timezone: 'Asia/Dhaka' });
 
 /* -------------------------------------------------------------------------- */
 /*                                   EXPORTS                                  */
@@ -415,7 +716,8 @@ module.exports = {
     deleteHistoryById,
     pushNotification,
     ifNotChange7Day,
-    removeItemAfter30Day
+    removeItemAfter30Day,
+    testLast7Day
 };
 
 

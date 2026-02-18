@@ -9,7 +9,7 @@ const userSchema = mongoose.Schema(
     firstName: {
       type: String,
       required: false,
-      default: null,
+      default: "Demo Name",
     },
     lastName: {
       type: String,
@@ -37,7 +37,7 @@ const userSchema = mongoose.Schema(
     profileImage: {
       type: String,
       required: false,
-      default: null
+      default: 'https://cdn-icons-png.flaticon.com/512/149/149071.png',
     },
     password: {
       type: String,
