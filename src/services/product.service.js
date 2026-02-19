@@ -212,33 +212,35 @@ const getProducts = async (userId) => {
         new ApiError(httpStatus.NOT_FOUND, "No products found");
     };
 
-    // const response = products.map(p => {
+    const response = products.map(p => {
 
-    //     const current = p.product?.price || 0;
-    //     let basePrice = current;
+        const current = p.product?.price || 0;
+        let basePrice = p.product.priceHistory[0]?.price || current;
 
-    //     // pick the oldest price from priceHistory
-    //     if (p.product?.priceHistory?.length) {
-    //         const oldest = p.product.priceHistory.reduce((a, b) =>
-    //             new Date(a.date) < new Date(b.date) ? a : b
-    //         );
-    //         basePrice = oldest?.price || current;
-    //     }
+        console.log(current)
 
-    //     const percent = basePrice ? ((current - basePrice) / basePrice) * 100 : 0;
+        // pick the oldest price from priceHistory
+        // if (p.product?.priceHistory?.length) {
+        //     const oldest = p.product.priceHistory.reduce((a, b) =>
+        //         new Date(a.date) < new Date(b.date) ? a : b
+        //     );
+        //     basePrice = oldest?.price || current;
+        // }
 
-    //     p.product.percentageChange = percent.toFixed(2);
+        const percent = basePrice ? ((current - basePrice) / basePrice) * 100 : 0;
 
-    //     // 🔥 Format priceHistory with readable dates
-    //     p.product.priceHistory = (p.product.priceHistory || []).map(item => ({
-    //         price: item.price,
-    //         date: item.date
-    //             ? new Date(item.date).toISOString()   // ISO format
-    //             : null
-    //     }));
+        p.product.percentageChange = percent.toFixed(2);
 
-    //     return p;
-    // });
+        // 🔥 Format priceHistory with readable dates
+        p.product.priceHistory = (p.product.priceHistory || []).map(item => ({
+            price: item.price,
+            date: item.date
+                ? new Date(item.date).toISOString()   // ISO format
+                : null
+        }));
+
+        return p;
+    });
 
     return products;
 };
@@ -267,7 +269,7 @@ const getHistory = async (userId) => {
         if (p.isPurchased && p.product?.priceHistory?.length) {
 
             // 🔥 Get oldest price from history
-            const oldestEntry = p.product.priceHistory[p.product.priceHistory.length - 1];
+            const oldestEntry = p.product.priceHistory[0];
 
             const oldPrice = oldestEntry?.price || 0;
             const currentPrice = p.product.price || 0;
