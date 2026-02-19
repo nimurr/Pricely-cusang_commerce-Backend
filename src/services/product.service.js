@@ -216,8 +216,7 @@ const getProducts = async (userId) => {
 
         const current = p.product?.price || 0;
         let basePrice = p.product.priceHistory[0]?.price || current;
-
-        console.log(current)
+ 
 
         // pick the oldest price from priceHistory
         // if (p.product?.priceHistory?.length) {
@@ -308,16 +307,15 @@ const getProductById = async (id) => {
     const current = product.product.price || 0;
     let basePrice = current;
 
-    if (product.product?.priceHistory?.length) {
-        // Sort priceHistory by date ascending (oldest first)
-        const sortedHistory = product.product.priceHistory.sort(
-            (a, b) => new Date(a.date) - new Date(b.date)
-        );
-
-        // Use the first recorded price as the base
-        const oldest = sortedHistory[0];
-        basePrice = oldest?.price || current;
-    }
+    // if (product.product?.priceHistory?.length) {
+    //     // Sort priceHistory by date ascending (oldest first)
+    //     const sortedHistory = product.product.priceHistory.sort(
+    //         (a, b) => new Date(a.date) - new Date(b.date)
+    //     );
+    //     // Use the first recorded price as the base
+    //     const oldest = sortedHistory[0];
+    //     basePrice = oldest?.price || current;
+    // }
 
     // Calculate percentage change based on first price
     const percentageChange = basePrice
@@ -394,7 +392,7 @@ const testLast7Day = async (id) => {
 
     const alternates = await savenDayKeepa.getAlternateProductsByCategory(product.product.asin, product.product.type, 3);
 
-    console.log(alternates)
+    console.log("total Products", alternates)
 
     // Merge with existing alternativeProducts
     const existingAlternates = product.alternativeProducts || [];
@@ -416,7 +414,6 @@ const testLast7Day = async (id) => {
     console.log(`Added ${alternates.length} alternate products for ASIN: ${product.product.asin}`);
 
     return product;
-
 }
 
 
@@ -432,97 +429,6 @@ function convertKeepaMinutesToDate(keepaMinutes) {
 
     return realDate;
 }
-
-// cron.schedule('0 0 0,12 * * *', async () => {
-//     console.log("Cron job started...");
-
-//     try {
-//         const products = await Product
-//             .find({ isDelete: false })
-//             .populate('userId', 'fcmToken isPushNotification oneTimePushAcceptedorReject');
-
-//         for (const product of products) {
-
-//             // Skip users/products where push is not allowed
-//             if (!product?.userId?.fcmToken) continue;
-//             if (!product?.userId?.isPushNotification) continue;
-//             if (!product?.userId?.oneTimePushAcceptedorReject) continue;
-//             if (!product?.isPushNotification) continue;
-
-//             const keepaResponse = await keepaService.fetchProductData(product.product.asin);
-//             if (!keepaResponse?.products?.length) continue;
-
-//             const kp = keepaResponse.products[0];
-//             if (!kp?.stats?.current?.[0]) continue;
-
-//             const newPrice = kp.stats.current[0] / 100;
-//             const oldPrice = product.product.price;
-
-//             // ✅ Only update if price changed
-//             if (newPrice !== oldPrice) {
-
-//                 console.log(`Price changed for ASIN: ${product.product.asin}`);
-
-//                 const current = kp.stats?.current?.[0];
-//                 const avg = kp.stats?.avg?.[0];
-
-//                 let currentStatusText = "No data available";
-//                 let title = "Product Price Update Alert!";
-
-//                 if (current && avg) {
-//                     if (current === avg) {
-//                         currentStatusText = "The price is stable.";
-//                     } else if (current < avg) {
-//                         currentStatusText = "The price dropped slightly.";
-//                         title = "Price Dropped! 🔻";
-//                     } else {
-//                         currentStatusText = "The price increased slightly.";
-//                         title = "Price Increased 🔺";
-//                     }
-//                 }
-
-//                 // Convert Keepa timestamp to real date
-//                 const keepaLastUpdate = kp.stats?.current[1];
-//                 const realDate = convertKeepaMinutesToDate(keepaLastUpdate);
-
-//                 // Update product price
-//                 product.product.price = newPrice;
-//                 product.product.currentStatusText = currentStatusText;
-
-//                 // 🔹 Update priceHistory
-//                 if (!Array.isArray(product.product.priceHistory)) {
-//                     product.product.priceHistory = [];
-//                 }
-
-//                 product.product.priceHistory.push({
-//                     price: newPrice,
-//                     date: realDate
-//                 });
-
-//                 // Optional: Keep last 50 entries only
-//                 if (product.product.priceHistory.length > 50) {
-//                     product.product.priceHistory = product.product.priceHistory.slice(-50);
-//                 }
-
-//                 await product.save();
-
-
-//                 // Send push notification
-//                 await sendPushNotification({
-//                     fcmToken: product.userId.fcmToken,
-//                     title,
-//                     price: newPrice,
-//                     date: realDate
-//                 });
-//             }
-//         }
-
-//         console.log("Cron job completed.");
-//     } catch (error) {
-//         console.error("Cron error:", error);
-//     }
-
-// }, { timezone: 'Asia/Dhaka' });
 
 cron.schedule('0 0 0,12 * * *', async () => {
     console.log("Cron job started...");
@@ -635,8 +541,6 @@ cron.schedule('0 0 0,12 * * *', async () => {
 }, { timezone: 'Asia/Dhaka' });
 
 
-
-
 /* -------------------------------------------------------------------------- */
 /*         Last 7 day if price not changed then add more alternate 3 products       */
 /* -------------------------------------------------------------------------- */
@@ -701,6 +605,37 @@ cron.schedule('0 0 0,12 * * *', async () => {
         console.error("Error in cron:", err);
     }
 }, { timezone: 'Asia/Dhaka' });
+
+
+
+/* -------------------------------------------------------------------------- */
+/*        Remove product after 30 days if price not changed (auto clean)     */
+/* -------------------------------------------------------------------------- */
+
+cron.schedule('0 0 0,12 * * *',
+
+    async () => {
+
+        try {
+            const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+            const products = await Product.find({
+                removeItemAfter30Day: true,
+                createdAt: { $lte: thirtyDaysAgo } // older than 30 days
+            });
+            console.log("==================== Product delete if 30-day true ====================");
+
+            for (const product of products) {
+                await product.deleteOne();
+            }
+
+        } catch (err) {
+            console.error("Error in 30-day cron:", err);
+        }
+
+    }, { timezone: 'Asia/Dhaka' });
+
+
 
 /* -------------------------------------------------------------------------- */
 /*                                   EXPORTS                                  */
