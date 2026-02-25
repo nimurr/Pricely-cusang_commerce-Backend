@@ -576,7 +576,6 @@ cron.schedule('0 0 0,12 * * *', async () => {
 /* -------------------------------------------------------------------------- */
 /*         Last 7 day if price not changed then add more alternate 3 products       */
 /* -------------------------------------------------------------------------- */
-// cron.schedule('0 0 0,12 * * *',
 
 // ─── Helper: wait N milliseconds ───────────────────────────────
 
@@ -597,7 +596,8 @@ function priceChangedInLast7Days(priceHistory) {
 }
 
 cron.schedule('0 0 0,12 * * *',
-    // cron.schedule('*/40 * * * * *', 
+// cron.schedule('*/20 * * * * *',
+
     async () => {
         console.log("Checking products for 7-day price inactivity...");
 
@@ -608,6 +608,11 @@ cron.schedule('0 0 0,12 * * *',
                 try {
                     const priceHistory = product.product?.priceHistory || [];
                     const existingAlternates = product.alternativeProducts || [];
+                    product.alternativeProducts = existingAlternates;
+                    if (product.alternativeProducts.length >= 0) {
+                        console.log(`ASIN ${product.product?.asin} — already has ${product.alternativeProducts.length} alternates, skipping`);
+                        continue;
+                    }
 
                     // ─── Condition 1: Skip if price changed in last 7 days ──────
                     if (priceChangedInLast7Days(priceHistory)) {
@@ -644,7 +649,7 @@ cron.schedule('0 0 0,12 * * *',
                     const searchTerm = brand.slice(0, 35);
                     const alternates = await savenDayKeepa.getAlternateProductsByCategory(asin, searchTerm, stillNeeded);
 
-                    console.log("all products:", alternates);
+                    // console.log("all products:", alternates);
 
                     if (!alternates.length) {
                         console.warn(`No alternates found for ASIN: ${asin}`);
