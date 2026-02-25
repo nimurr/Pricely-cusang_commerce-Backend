@@ -4,102 +4,74 @@ const config = require("../config/config");
 class savenDayKeepa {
     constructor() {
         this.apiKey = config.KEEPA_API_KEY;
-        this.productUrl = "https://api.keepa.com/search";
+        this.searchUrl = "https://api.keepa.com/search";
         this.domainId = 3; // Amazon DE
     }
 
-    // Fetch single product by ASIN
-    async fetchProductData(asin) {
+    // ─── Search products by brand name ─────────────────────────────
+    async searchProductsByBrand(brand, page = 0) {
         try {
-            const response = await axios.get(this.productUrl, {
+            const response = await axios.get(this.searchUrl, {
                 params: {
                     key: this.apiKey,
                     domain: this.domainId,
-                    asin,
-                    stats: 90,
-                    rating: 1,
-                },
-            });
-
-            // Keepa returns HTTP 200 even on errors — check body
-            if (response.data?.error) {
-                console.error("Keepa fetchProductData error:", JSON.stringify(response.data.error));
-                return null;
-            }
-
-            return response.data;
-        } catch (error) {
-            console.error("fetchProductData HTTP error:", error?.response?.data || error.message);
-            return null;
-        }
-    }
-
-    // Fetch multiple products in ONE API call (up to 100 ASINs)
-    async fetchMultipleProducts(asins) {
-        try {
-            const response = await axios.get(this.productUrl, {
-                params: {
-                    key: this.apiKey,
-                    domain: this.domainId,
-                    asin: asins.join(","),
-                    stats: 90,
-                    rating: 1,
+                    type: "product",
+                    term: brand,
+                    page,
                 },
             });
 
             if (response.data?.error) {
-                console.error("Keepa fetchMultipleProducts error:", JSON.stringify(response.data.error));
+                console.error("Keepa search error:", JSON.stringify(response.data.error));
                 return [];
             }
 
-            return response.data?.products || [];
+            const products = response.data?.products || [];
+            console.log(`Brand search "${brand}" returned ${products.length} products`);
+            return products;
+
         } catch (error) {
-            console.error("fetchMultipleProducts HTTP error:", error?.response?.data || error.message);
+            console.error("searchProductsByBrand HTTP error:", error?.response?.data || error.message);
             return [];
         }
     }
 
-    // Fetch bestseller ASINs by category ID
-    async fetchBestsellerAsins(categoryId) {
-        try {
-            const response = await axios.get(this.bestsellerUrl, {
-                params: {
-                    key: this.apiKey,
-                    domain: this.domainId,
-                    category: categoryId,
-                },
-            });
-
-            if (response.data?.error) {
-                console.error("Keepa bestsellers error:", JSON.stringify(response.data.error));
-                return [];
-            }
-
-            return response.data?.bestSellersList?.asinList || [];
-        } catch (error) {
-            console.error("fetchBestsellerAsins HTTP error:", error?.response?.data || error.message);
-            return [];
-        }
-    }
-
-    // Extract latest review and rating
-    extractLatestReviewData(product) {
-        if (!product) return { avgRating: null, reviewCount: null };
+    // ─── Extract latest review and rating (3 fallback methods) ─────
+    extractLatestReviewData(keepaProduct) {
+        if (!keepaProduct) return { avgRating: null, reviewCount: null };
 
         let avgRating = null;
         let reviewCount = null;
 
-        if (product.stats) {
-            if (product.stats.rating != null) avgRating = product.stats.rating / 10;
-            if (product.stats.reviewCount != null) reviewCount = product.stats.reviewCount;
+        // METHOD 1: stats object (most reliable for current data)
+        if (keepaProduct.stats) {
+            if (keepaProduct.stats.rating != null) avgRating = keepaProduct.stats.rating / 10;
+            if (keepaProduct.stats.reviewCount != null) reviewCount = keepaProduct.stats.reviewCount;
         }
 
-        if ((avgRating === null || reviewCount === null) && product.csv) {
-            if (avgRating === null && product.csv[16]?.length >= 2) {
-                avgRating = product.csv[16][product.csv[16].length - 1] / 10;
+        // METHOD 2: csv arrays (historical data)
+        // csv[16] = RATING array      [time, rating, time, rating, ...]
+        // csv[17] = REVIEW_COUNT array [time, count,  time, count,  ...]
+        if ((avgRating === null || reviewCount === null) && keepaProduct.csv) {
+            if (avgRating === null && keepaProduct.csv[16]?.length >= 2) {
+                const ratingArray = keepaProduct.csv[16];
+                avgRating = ratingArray[ratingArray.length - 1] / 10;
             }
-            if (reviewCount === null && product.csv[17]?.length >= 2) {
-                reviewCount = product.csv[17][product.csv[17].length - 1];
+            if (reviewCount === null && keepaProduct.csv[17]?.length >= 2) {
+                const reviewArray = keepaProduct.csv[17];
+                reviewCount = reviewArray[reviewArray.length - 1];
+            }
+        }
+
+        // METHOD 3: reviews object (older Keepa API structure)
+        if ((avgRating === null || reviewCount === null) && keepaProduct.reviews) {
+            if (avgRating === null && keepaProduct.reviews.ratingCount?.length >= 2) {
+                const ratingArr = keepaProduct.reviews.ratingCount;
+                avgRating = ratingArr[ratingArr.length - 1] / 10;
+            }
+            if (reviewCount === null && keepaProduct.reviews.reviewCount?.length >= 2) {
+                const revArr = keepaProduct.reviews.reviewCount;
+                reviewCount = revArr[revArr.length - 1];
             }
         }
 
@@ -109,94 +81,49 @@ class savenDayKeepa {
         };
     }
 
-    // Format a raw Keepa product into our alternate shape
+    // ─── Format a raw Keepa product into our shape ─────────────────
     formatProduct(kp) {
-        const currentPrices = kp.stats?.current || [];
-        const rawPrice = currentPrices[11] ?? currentPrices[0] ?? -1;
+        const currentPrices = kp.csv?.[1] || [];
+        const rawPrice = currentPrices[0] ?? -1;
         const { avgRating, reviewCount } = this.extractLatestReviewData(kp);
 
         return {
             asin: kp.asin,
             title: kp.title || "N/A",
-            price: rawPrice > 0 ? rawPrice / 100 : 0,
+            brand: kp.brand || null,
+            // price: rawPrice > 0 ? rawPrice / 100 : 0,
             avgRating,
             reviewCount,
+            images: kp.images[0]?.m,
+            imageBaseURL: "https://images-na.ssl-images-amazon.com/images/I/",
+            producturl: `https://www.amazon.de/dp/${kp.asin}`,
             image: kp.imagesCSV ? kp.imagesCSV.split(",")[0] : null,
         };
     }
 
-    // Main method: get alternate products
-    async getAlternateProductsByCategory(asin, type, limit = 4) {
+    async getAlternateProductsByCategory(asin, searchTerm, limit = 4) {
         try {
-            // Step 1: Fetch the main product
-            const keepaData = await this.fetchProductData(asin);
-            if (!keepaData?.products?.length) {
-                console.warn("No product data for ASIN:", asin);
+            if (!searchTerm) {
+                console.warn("No search term provided, cannot search alternates for ASIN:", asin);
                 return [];
             }
 
-            const product = keepaData.products[0];
-            console.log("Main product:", product.title);
+            console.log(`Searching alternates for ASIN: ${asin} | Term: "${searchTerm}"`);
 
-            // ─── Strategy 1: Use similarProducts already on the product ───
-            // Keepa returns these directly — zero extra API calls needed
-            const similarAsins = (product.similarProducts || [])
-                .filter(a => a !== asin)
-                .slice(0, 15);
+            const products = await this.searchProductsByBrand(searchTerm); // reuses same method
 
-            console.log(`Similar products from product data: ${similarAsins.length}`);
-
-            if (similarAsins.length >= limit) {
-                const similarProducts = await this.fetchMultipleProducts(similarAsins);
-                const results = similarProducts
-                    .filter(kp => kp.asin && kp.asin !== asin)
-                    .slice(0, limit)
-                    .map(kp => this.formatProduct(kp));
-
-                if (results.length >= limit) {
-                    console.log(`Returning ${results.length} alternates from similarProducts`);
-                    return results;
-                }
-            }
-
-            // ─── Strategy 2: Bestsellers from the product's own category ───
-            // catId is already on the product — no search API call needed
-            const categoryTree = product.categoryTree || [];
-            if (!categoryTree.length) {
-                console.warn("No categoryTree for ASIN:", asin);
+            if (!products.length) {
+                console.warn(`No products found for term: "${searchTerm}"`);
                 return [];
             }
 
-            // Try from most specific to broadest category
-            for (let i = categoryTree.length - 1; i >= 0; i--) {
-                const catId = categoryTree[i]?.catId;
-                if (!catId) continue;
+            const results = products
+                .filter(kp => kp.asin && kp.asin !== asin)
+                .slice(0, limit)
+                .map(kp => this.formatProduct(kp));
 
-                console.log(`Trying category [${catId}] ${categoryTree[i]?.name}`);
-
-                const bestsellerAsins = await this.fetchBestsellerAsins(catId);
-                if (!bestsellerAsins.length) continue;
-
-                const filteredAsins = bestsellerAsins
-                    .filter(a => a !== asin)
-                    .slice(0, 15);
-
-                console.log(`Found ${filteredAsins.length} bestseller candidates in category`);
-
-                const products = await this.fetchMultipleProducts(filteredAsins);
-                const results = products
-                    .filter(kp => kp.asin && kp.asin !== asin)
-                    .slice(0, limit)
-                    .map(kp => this.formatProduct(kp));
-
-                if (results.length > 0) {
-                    console.log(`Returning ${results.length} alternates from bestsellers`);
-                    return results;
-                }
-            }
-
-            console.warn("All strategies exhausted, no alternates found for ASIN:", asin);
-            return [];
+            console.log(`✅ Found ${results.length} alternates for term: "${searchTerm}"`);
+            return results;
 
         } catch (err) {
             console.error("getAlternateProductsByCategory error:", err?.response?.data || err.message);

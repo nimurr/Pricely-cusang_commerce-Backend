@@ -15,7 +15,7 @@ const routes = require("./routes/v1");
 const { errorConverter, errorHandler } = require("./middlewares/error");
 const ApiError = require("./utils/ApiError");
 const bodyParser = require("body-parser");
-const rateLimit = require("express-rate-limit");
+// const rateLimit = require("express-rate-limit");
 
 const app = express();
 
@@ -24,13 +24,13 @@ if (config.env !== "test") {
   app.use(morgan.errorHandler);
 }
 
-const limiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // max 100 requests per IP
-  message: "Too many requests, please try again later."
-});
+// const limiter = rateLimit({
+//   windowMs: 15 * 60 * 1000, // 15 minutes
+//   max: 100, // max 100 requests per IP
+//   message: "Too many requests, please try again later."
+// });
 
-app.use(limiter);
+// app.use(limiter);
 
 // malter for file upload
 app.use(express.static("public"));
