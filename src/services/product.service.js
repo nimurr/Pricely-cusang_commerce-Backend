@@ -446,6 +446,9 @@ const testLast7Day = async (id) => {
 /*                        CRON For Push Notification                          */
 /* -------------------------------------------------------------------------- */
 
+const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+
 function convertKeepaMinutesToDate(keepaMinutes) {
     if (!keepaMinutes) return null;
 
@@ -470,6 +473,9 @@ cron.schedule('0 0 0,12 * * *', async () => {
             if (!product?.userId?.isPushNotification) continue;
             if (!product?.userId?.oneTimePushAcceptedorReject) continue;
             if (!product?.isPushNotification) continue;
+
+            await sleep(3000); // small delay before DB update and notification
+
 
             const keepaResponse = await keepaService.fetchProductData(product.product.asin);
             if (!keepaResponse?.products?.length) continue;
@@ -502,6 +508,7 @@ cron.schedule('0 0 0,12 * * *', async () => {
                         title = "Price Increased 🔺";
                     }
                 }
+
 
                 // 🔹 Convert Keepa timestamp
                 const keepaLastUpdate = kp.stats?.current?.[1];
@@ -572,7 +579,7 @@ cron.schedule('0 0 0,12 * * *', async () => {
 // cron.schedule('0 0 0,12 * * *',
 
 // ─── Helper: wait N milliseconds ───────────────────────────────
-const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
 
 function priceChangedInLast7Days(priceHistory) {
     if (!Array.isArray(priceHistory) || priceHistory.length < 2) return false;
@@ -589,90 +596,91 @@ function priceChangedInLast7Days(priceHistory) {
     return prices.some(price => price !== firstPrice);
 }
 
-// cron.schedule('0 0 0,12 * * *',
-cron.schedule('*/40 * * * * *', async () => {
-    console.log("Checking products for 7-day price inactivity...");
+cron.schedule('0 0 0,12 * * *',
+    // cron.schedule('*/40 * * * * *', 
+    async () => {
+        console.log("Checking products for 7-day price inactivity...");
 
-    try {
-        const products = await Product.find({ isDelete: false, isPurchased: false });
+        try {
+            const products = await Product.find({ isDelete: false, isPurchased: false });
 
-        for (const product of products) {
-            try {
-                const priceHistory = product.product?.priceHistory || [];
-                const existingAlternates = product.alternativeProducts || [];
+            for (const product of products) {
+                try {
+                    const priceHistory = product.product?.priceHistory || [];
+                    const existingAlternates = product.alternativeProducts || [];
 
-                // ─── Condition 1: Skip if price changed in last 7 days ──────
-                if (priceChangedInLast7Days(priceHistory)) {
-                    console.log(`ASIN ${product.product?.asin} — price changed recently, skipping`);
-                    continue;
+                    // ─── Condition 1: Skip if price changed in last 7 days ──────
+                    if (priceChangedInLast7Days(priceHistory)) {
+                        console.log(`ASIN ${product.product?.asin} — price changed recently, skipping`);
+                        continue;
+                    }
+
+                    // ─── Condition 2: Skip if already has 3 or more alternates ──
+                    if (existingAlternates.length >= 3) {
+                        console.log(`ASIN ${product.product?.asin} — already has ${existingAlternates.length} alternates, skipping`);
+                        continue;
+                    }
+
+                    const { asin, title: brand } = product.product || {};
+
+                    // ─── Condition 3: Skip if missing ASIN or brand ─────────────
+                    if (!asin) {
+                        console.warn(`Skipping product ID ${product._id} — missing ASIN`);
+                        continue;
+                    }
+
+                    if (!brand) {
+                        console.warn(`Skipping ASIN ${asin} — missing brand`);
+                        continue;
+                    }
+
+                    // ─── Wait before each Keepa API call ───────────────────────
+                    // refillRate: 1 token per ~200ms — 20s gap is safe
+                    console.log(`Waiting 10s before Keepa API call for ASIN: ${asin}...`);
+                    await sleep(10000);
+
+                    // ─── Fetch alternates by brand ──────────────────────────────
+                    const stillNeeded = 3 - existingAlternates.length;
+                    const searchTerm = brand.slice(0, 35);
+                    const alternates = await savenDayKeepa.getAlternateProductsByCategory(asin, searchTerm, stillNeeded);
+
+                    console.log("all products:", alternates);
+
+                    if (!alternates.length) {
+                        console.warn(`No alternates found for ASIN: ${asin}`);
+                        continue;
+                    }
+
+                    console.log(`Fetched ${alternates.length} alternates:`, alternates.map(a => a.asin));
+
+                    // ─── Condition 4: Skip already existing ASINs ───────────────
+                    const existingAsinSet = new Set(existingAlternates.map(a => a.asin));
+                    const newAlternates = alternates.filter(alt => !existingAsinSet.has(alt.asin));
+
+                    if (!newAlternates.length) {
+                        console.log(`No new alternates to add for ASIN: ${asin} — all already exist`);
+                        continue;
+                    }
+
+                    // ─── Save only new alternates to DB ────────────────────────
+                    await Product.findByIdAndUpdate(
+                        product._id,
+                        { $push: { alternativeProducts: { $each: newAlternates } } }
+                    );
+
+                    console.log(`✅ Added ${newAlternates.length} new alternates for ASIN: ${asin}`);
+
+                } catch (productErr) {
+                    console.error(`Error processing product ID ${product._id}:`, productErr.message);
                 }
-
-                // ─── Condition 2: Skip if already has 3 or more alternates ──
-                if (existingAlternates.length >= 3) {
-                    console.log(`ASIN ${product.product?.asin} — already has ${existingAlternates.length} alternates, skipping`);
-                    continue;
-                }
-
-                const { asin, title: brand } = product.product || {};
-
-                // ─── Condition 3: Skip if missing ASIN or brand ─────────────
-                if (!asin) {
-                    console.warn(`Skipping product ID ${product._id} — missing ASIN`);
-                    continue;
-                }
-
-                if (!brand) {
-                    console.warn(`Skipping ASIN ${asin} — missing brand`);
-                    continue;
-                }
-
-                // ─── Wait before each Keepa API call ───────────────────────
-                // refillRate: 1 token per ~200ms — 20s gap is safe
-                console.log(`Waiting 20s before Keepa API call for ASIN: ${asin}...`);
-                await sleep(20000);
-
-                // ─── Fetch alternates by brand ──────────────────────────────
-                const stillNeeded = 3 - existingAlternates.length;
-                const searchTerm = brand.slice(0, 35);
-                const alternates = await savenDayKeepa.getAlternateProductsByCategory(asin, searchTerm, stillNeeded);
-
-                console.log("all products:", alternates);
-
-                if (!alternates.length) {
-                    console.warn(`No alternates found for ASIN: ${asin}`);
-                    continue;
-                }
-
-                console.log(`Fetched ${alternates.length} alternates:`, alternates.map(a => a.asin));
-
-                // ─── Condition 4: Skip already existing ASINs ───────────────
-                const existingAsinSet = new Set(existingAlternates.map(a => a.asin));
-                const newAlternates = alternates.filter(alt => !existingAsinSet.has(alt.asin));
-
-                if (!newAlternates.length) {
-                    console.log(`No new alternates to add for ASIN: ${asin} — all already exist`);
-                    continue;
-                }
-
-                // ─── Save only new alternates to DB ────────────────────────
-                await Product.findByIdAndUpdate(
-                    product._id,
-                    { $push: { alternativeProducts: { $each: newAlternates } } }
-                );
-
-                console.log(`✅ Added ${newAlternates.length} new alternates for ASIN: ${asin}`);
-
-            } catch (productErr) {
-                console.error(`Error processing product ID ${product._id}:`, productErr.message);
             }
+
+            console.log("✅ 7-day alternate check completed.");
+
+        } catch (err) {
+            console.error("Cron job failed:", err);
         }
-
-        console.log("✅ 7-day alternate check completed.");
-
-    } catch (err) {
-        console.error("Cron job failed:", err);
-    }
-}, { timezone: 'Asia/Dhaka' });
+    }, { timezone: 'Asia/Dhaka' });
 
 /* -------------------------------------------------------------------------- */
 /*        Remove product after 30 days if price not changed (auto clean)     */
@@ -684,6 +692,8 @@ cron.schedule('0 0 0,12 * * *',
 
         try {
             const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
+
+            await sleep(3000); // small delay before DB update and notification
 
             const products = await Product.find({
                 removeItemAfter30Day: true,
