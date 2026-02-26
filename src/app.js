@@ -24,13 +24,6 @@ if (config.env !== "test") {
   app.use(morgan.errorHandler);
 }
 
-// const limiter = rateLimit({
-//   windowMs: 15 * 60 * 1000, // 15 minutes
-//   max: 100, // max 100 requests per IP
-//   message: "Too many requests, please try again later."
-// });
-
-// app.use(limiter);
 
 // malter for file upload
 app.use(express.static("public"));
@@ -98,3 +91,13 @@ app.use(errorConverter);
 app.use(errorHandler);
 
 module.exports = app;
+
+
+
+
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+// ======================================================================================
+
+
