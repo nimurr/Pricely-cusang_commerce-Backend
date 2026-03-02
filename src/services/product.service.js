@@ -220,20 +220,10 @@ const getProducts = async (userId) => {
     const response = products.map(p => {
 
         const current = p.product?.price || 0;
-        let basePrice = p.product.priceHistory[0]?.price || current;
+        const previusPrice = p.product?.previousPrice || 0;
 
-
-        // pick the oldest price from priceHistory
-        // if (p.product?.priceHistory?.length) {
-        //     const oldest = p.product.priceHistory.reduce((a, b) =>
-        //         new Date(a.date) < new Date(b.date) ? a : b
-        //     );
-        //     basePrice = oldest?.price || current;
-        // }
-
-        const percent = basePrice ? ((current - basePrice) / basePrice) * 100 : 0;
-
-        p.product.percentageChange = percent.toFixed(2);
+        const percentageChange = current ? ((previusPrice - current) / current * 100) : 0;
+        p.product.percentageChange = percentageChange.toFixed(2);
 
         // 🔥 Format priceHistory with readable dates
         p.product.priceHistory = (p.product.priceHistory || []).map(item => ({
