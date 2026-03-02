@@ -127,22 +127,27 @@ const createProduct = async ({ productUrl, userId }) => {
             reviewCount,
             priceHistory,
             lowestPrice,
-            previousPrice,
+            previousPrice: priceHistory[1]?.price || 0,
             type: kp.type,
         }
     };
+
+    if (productData.product.price === 0) {
+        throw new Error("This product is currently unavailable for tracking (price is 0). Please try another product.");
+    }
+
 
     let currentStatusText = "No data available";
     let title = "Product Price Update Alert!";
 
 
-    if (productData?.product?.price && productData?.product?.priceHistory[0]?.price) {
-        if (productData?.product?.price === productData?.product?.priceHistory[0]?.price) {
+    if (productData?.product?.price && productData?.product?.priceHistory[1]?.price) {
+        if (productData?.product?.price === productData?.product?.priceHistory[1]?.price) {
             currentStatusText = "The price is stable.";
-        } else if (productData?.product?.price < productData?.product?.priceHistory[0]?.price) {
+        } else if (productData?.product?.price < productData?.product?.priceHistory[1]?.price) {
             currentStatusText = "The price dropped slightly.";
             title = "Price Dropped! 🔻";
-        } else if (productData?.product?.price > productData?.product?.priceHistory[0]?.price) {
+        } else if (productData?.product?.price > productData?.product?.priceHistory[1]?.price) {
             currentStatusText = "The price increased slightly.";
             title = "Price Increased 🔺";
         }
@@ -305,23 +310,10 @@ const getProductById = async (id) => {
     if (!product) throw new Error("Product not found");
 
     const current = product.product.price || 0;
-    let basePrice = current;
+    const previusPrice = product.product.previousPrice || 0;
 
-    // if (product.product?.priceHistory?.length) {
-    //     // Sort priceHistory by date ascending (oldest first)
-    //     const sortedHistory = product.product.priceHistory.sort(
-    //         (a, b) => new Date(a.date) - new Date(b.date)
-    //     );
-    //     // Use the first recorded price as the base
-    //     const oldest = sortedHistory[0];
-    //     basePrice = oldest?.price || current;
-    // }
 
-    // Calculate percentage change based on first price
-    const percentageChange = basePrice
-        ? ((current - basePrice) / basePrice) * 100
-        : 0;
-
+    const percentageChange = current ? ((previusPrice - current) / current * 100) : 0;
     product.product.percentageChange = percentageChange.toFixed(2);
 
     // Trend indicator based on percentage
@@ -596,7 +588,7 @@ function priceChangedInLast7Days(priceHistory) {
 }
 
 cron.schedule('0 0 0,12 * * *',
-// cron.schedule('*/20 * * * * *',
+    // cron.schedule('*/20 * * * * *',
 
     async () => {
         console.log("Checking products for 7-day price inactivity...");
