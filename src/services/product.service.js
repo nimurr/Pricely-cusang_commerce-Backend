@@ -247,8 +247,6 @@ const getProducts = async (userId) => {
 const getHistory = async (userId) => {
 
 
-
-
     const products = await Product.find({
         userId,
         isDelete: true
@@ -263,7 +261,7 @@ const getHistory = async (userId) => {
         if (p.isPurchased && p.product?.priceHistory?.length) {
 
             // 🔥 Get oldest price from history
-            const oldestEntry = p.product.priceHistory[0];
+            const oldestEntry = p.product.priceHistory[1];
 
             const oldPrice = oldestEntry?.price || 0;
             const currentPrice = p.product.price || 0;
