@@ -11,19 +11,17 @@ const httpStatus = require("http-status");
 // ============================================
 // productController.js or wherever createProduct is - UPDATED
 // ============================================
+
 const createProduct = async ({ productUrl, userId }) => {
     if (!productUrl) throw new Error("Product URL is required");
 
-    // 1️⃣ Extract clean https URL
     const urlMatch = productUrl.match(/https:\/\/[^\s]+/);
     if (!urlMatch) throw new Error("No valid https URL found");
     productUrl = urlMatch[0].trim();
 
-    // 2️⃣ Limit per user
     const count = await Product.countDocuments({ userId, isDelete: false });
     if (count > 2) throw new Error("You can only track 3 products simultaneously. Remove one first.");
 
-    // 3️⃣ Expand short Amazon URL safely
     const expandShortAmazonUrl = async (shortUrl) => {
         try {
             const response = await axios.get(shortUrl, {
@@ -43,24 +41,20 @@ const createProduct = async ({ productUrl, userId }) => {
         productUrl = await expandShortAmazonUrl(productUrl);
     }
 
-    // 4️⃣ Extract ASIN
     const asinMatch = productUrl.match(/\/dp\/([A-Z0-9]{10})|\/gp\/product\/([A-Z0-9]{10})/);
     if (!asinMatch) throw new Error("Invalid Amazon product URL");
     const asin = asinMatch[1] || asinMatch[2];
 
-    // 5️⃣ Prevent duplicate
     const exists = await Product.findOne({ "product.asin": asin, userId, isDelete: false });
     if (exists) throw new Error("Product already exists");
 
     await new Promise(resolve => setTimeout(resolve, 2000));
 
-    // 6️⃣ Fetch Keepa data
     const keepaResponse = await keepaService.fetchProductData(asin);
     if (!keepaResponse.products?.length) throw new Error("Keepa returned no product data");
     const kp = keepaResponse.products[0];
     const { avgRating, reviewCount } = keepaService.extractLatestReviewData(kp);
 
-    // 7️⃣ Helpers
     const getPrice = (v) => (v != null && v !== -1 ? v / 100 : 0);
 
     const keepaTimeToDate = (keepaMinutes) => {
@@ -82,10 +76,7 @@ const createProduct = async ({ productUrl, userId }) => {
 
             const price = rawPrice / 100;
             if (lastPrice === null || price !== lastPrice) {
-                changes.push({
-                    date: keepaTimeToDate(keepaTime),
-                    price
-                });
+                changes.push({ date: keepaTimeToDate(keepaTime), price });
                 lastPrice = price;
             }
         }
@@ -93,24 +84,17 @@ const createProduct = async ({ productUrl, userId }) => {
         return changes.slice(-5).reverse();
     };
 
-
-
     const currentPrice = getPrice(kp.stats?.current?.[0]);
-
-
-
-    // 9️⃣ Extract price history
     const priceHistory = extractLastFivePriceChanges(kp);
-
 
     const lowestPrice = priceHistory.length
         ? Math.min(...priceHistory.map(p => p.price))
         : currentPrice || 0;
 
-    // Get previous price (most recent before current)
-    const previousPrice = priceHistory.length ? priceHistory[0].price : currentPrice || 0;
+    // ✅ previousPrice = the most recent historical price point (priceHistory[1])
+    // priceHistory[0] is the latest change, priceHistory[1] is the one before it
+    const previousPrice = priceHistory[1]?.price || 0;
 
-    // 10️⃣ Prepare product data
     const productData = {
         userId,
         url: productUrl,
@@ -127,7 +111,7 @@ const createProduct = async ({ productUrl, userId }) => {
             reviewCount,
             priceHistory,
             lowestPrice,
-            previousPrice: priceHistory[1]?.price || 0,
+            previousPrice,
             type: kp.type,
         }
     };
@@ -136,23 +120,73 @@ const createProduct = async ({ productUrl, userId }) => {
         throw new Error("This product is currently unavailable for tracking (price is 0). Please try another product.");
     }
 
+    // ─────────────────────────────────────────────────────────────
+    // ✅ PERCENTAGE CALCULATION & CATEGORY (your spec, section 1-4)
+    // ─────────────────────────────────────────────────────────────
 
+    // Helper: classify a % change into a named category
+    const getPriceChangeCategory = (percent) => {
+        if (percent > 10) return "STRONG_UP";
+        if (percent > 2 && percent <= 10) return "LIGHT_UP";
+        if (percent >= -2 && percent <= 2) return "STABLE";
+        if (percent < -2 && percent >= -10) return "LIGHT_DOWN";
+        if (percent < -10) return "STRONG_DOWN";
+    };
+
+    // Helper: human-readable text + alert title per category
+    const getCategoryMeta = (category) => {
+        switch (category) {
+            case "STRONG_UP": return { text: "The price increased significantly.", title: "Price Surged! 🔺" };
+            case "LIGHT_UP": return { text: "The price increased slightly.", title: "Price Increased 🔺" };
+            case "STABLE": return { text: "The price is stable.", title: "Product Price Update Alert!" };
+            case "LIGHT_DOWN": return { text: "The price dropped slightly.", title: "Price Dropped! 🔻" };
+            case "STRONG_DOWN": return { text: "The price dropped significantly.", title: "Price Dropped Significantly! 🔻" };
+            default: return { text: "No data available.", title: "Product Price Update Alert!" };
+        }
+    };
+
+    let priceChangePercent = null;
+    let priceChangeCategory = null;
     let currentStatusText = "No data available";
     let title = "Product Price Update Alert!";
 
+    if (currentPrice && previousPrice) {
+        // ✅ Correct formula: ((currentPrice - previousPrice) / previousPrice) * 100
+        priceChangePercent = ((currentPrice - previousPrice) / previousPrice) * 100;
 
-    if (productData?.product?.price && productData?.product?.priceHistory[1]?.price) {
-        if (productData?.product?.price === productData?.product?.priceHistory[1]?.price) {
-            currentStatusText = "The price is stable.";
-        } else if (productData?.product?.price < productData?.product?.priceHistory[1]?.price) {
-            currentStatusText = "The price dropped slightly.";
-            title = "Price Dropped! 🔻";
-        } else if (productData?.product?.price > productData?.product?.priceHistory[1]?.price) {
-            currentStatusText = "The price increased slightly.";
-            title = "Price Increased 🔺";
-        }
+        priceChangeCategory = getPriceChangeCategory(priceChangePercent);
+
+        const meta = getCategoryMeta(priceChangeCategory);
+        currentStatusText = meta.text;
+        title = meta.title;
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // ✅ TREND — based on broader price history, NOT just one point
+    // (section 4B of spec: trend is separate from the % comparison)
+    // ─────────────────────────────────────────────────────────────
+    const getTrend = (priceHistory) => {
+        if (!priceHistory || priceHistory.length < 2) return "stable";
+
+        // Compare oldest vs newest available point in history
+        const oldest = priceHistory[priceHistory.length - 1].price;
+        const newest = priceHistory[0].price;
+        const overallPercent = ((newest - oldest) / oldest) * 100;
+
+        if (overallPercent > 2) return "rising";
+        if (overallPercent < -2) return "falling";
+        return "stable";
+    };
+
+    const trend = getTrend(priceHistory);
+
     productData.product.currentStatusText = currentStatusText;
+    productData.product.priceChangePercent = priceChangePercent
+        ? parseFloat(priceChangePercent.toFixed(2))   // e.g. -73.08
+        : null;
+    productData.product.priceChangeCategory = priceChangeCategory; // e.g. "STRONG_DOWN"
+    productData.product.trend = trend;               // e.g. "falling"
+    productData.product.alertTitle = title;
 
     await Product.create(productData);
 
@@ -222,7 +256,7 @@ const getProducts = async (userId) => {
         const current = p.product?.price || 0;
         const previusPrice = p.product?.previousPrice || 0;
 
-        const percentageChange = current ? ((previusPrice - current) / current * 100) : 0;
+        const percentageChange = current ? ((current - previusPrice) / previusPrice * 100) : 0;
         p.product.percentageChange = percentageChange.toFixed(2);
 
         // 🔥 Format priceHistory with readable dates
@@ -301,7 +335,7 @@ const getProductById = async (id) => {
     const previusPrice = product.product.previousPrice || 0;
 
 
-    const percentageChange = current ? ((previusPrice - current) / current * 100) : 0;
+    const percentageChange = current ? ((current - previusPrice) / previusPrice * 100) : 0;
     product.product.percentageChange = percentageChange.toFixed(2);
 
     // Trend indicator based on percentage
@@ -359,7 +393,6 @@ const removeItemAfter30Day = async (id) => {
 
     product.removeItemAfter30Day = !product.removeItemAfter30Day;
     await product.save();
-
 
 
     return product;
@@ -448,14 +481,12 @@ cron.schedule('0 0 0,12 * * *', async () => {
 
         for (const product of products) {
 
-            // 🔹 Skip users/products where push not allowed
             if (!product?.userId?.fcmToken) continue;
             if (!product?.userId?.isPushNotification) continue;
             if (!product?.userId?.oneTimePushAcceptedorReject) continue;
             if (!product?.isPushNotification) continue;
 
-            await sleep(3000); // small delay before DB update and notification
-
+            await sleep(3000);
 
             const keepaResponse = await keepaService.fetchProductData(product.product.asin);
             if (!keepaResponse?.products?.length) continue;
@@ -466,29 +497,9 @@ cron.schedule('0 0 0,12 * * *', async () => {
             const newPrice = kp.stats.current[0] / 100;
             const oldPrice = product.product.price;
 
-            // ✅ Only continue if price changed
             if (newPrice !== oldPrice) {
 
                 console.log(`Price changed for ASIN: ${product.product.asin}`);
-
-                const current = kp.stats?.current?.[0];
-                const avg = kp.stats?.avg?.[0];
-
-                let currentStatusText = "No data available";
-                let title = "Product Price Update Alert!";
-
-                if (current && avg) {
-                    if (current === avg) {
-                        currentStatusText = "The price is stable.";
-                    } else if (current < avg) {
-                        currentStatusText = "The price dropped slightly.";
-                        title = "Price Dropped! 🔻";
-                    } else {
-                        currentStatusText = "The price increased slightly.";
-                        title = "Price Increased 🔺";
-                    }
-                }
-
 
                 // 🔹 Convert Keepa timestamp
                 const keepaLastUpdate = kp.stats?.current?.[1];
@@ -499,13 +510,13 @@ cron.schedule('0 0 0,12 * * *', async () => {
                     product.product.priceHistory = [];
                 }
 
-                // 🔹 Add new price entry
+                // 🔹 Add new price entry at the front
                 product.product.priceHistory.unshift({
                     price: newPrice,
                     date: realDate
                 });
 
-                // 🔹 Keep only last 50 entries
+                // 🔹 Keep only last 5 entries
                 if (product.product.priceHistory.length > 5) {
                     product.product.priceHistory =
                         product.product.priceHistory.slice(0, 5);
@@ -514,21 +525,75 @@ cron.schedule('0 0 0,12 * * *', async () => {
                 const priceHistory = product.product.priceHistory;
                 const currentPrice = newPrice;
 
-                // ✅ Calculate lowest price (your method)
                 const lowestPrice = priceHistory.length
                     ? Math.min(...priceHistory.map(p => p.price))
-                    : currentPrice || 0;
+                    : currentPrice;
 
-                // ✅ Calculate previous price (your method)
+                // ✅ previousPrice = index 1, because index 0 is the new price we just unshifted
                 const previousPrice = priceHistory.length > 1
-                    ? priceHistory[1].price   // because index 0 is current (we used unshift)
-                    : currentPrice || 0;
+                    ? priceHistory[1].price
+                    : currentPrice;
+
+                // ─────────────────────────────────────────────────────
+                // ✅ PERCENTAGE CALCULATION
+                // Formula: ((currentPrice - previousPrice) / previousPrice) * 100
+                // ─────────────────────────────────────────────────────
+                const getPriceChangeCategory = (percent) => {
+                    if (percent > 10) return "STRONG_UP";
+                    if (percent > 2 && percent <= 10) return "LIGHT_UP";
+                    if (percent >= -2 && percent <= 2) return "STABLE";
+                    if (percent < -2 && percent >= -10) return "LIGHT_DOWN";
+                    if (percent < -10) return "STRONG_DOWN";
+                };
+
+                const getCategoryMeta = (category) => {
+                    switch (category) {
+                        case "STRONG_UP": return { text: "The price increased significantly.", title: "Price Surged! 🔺" };
+                        case "LIGHT_UP": return { text: "The price increased slightly.", title: "Price Increased 🔺" };
+                        case "STABLE": return { text: "The price is stable.", title: "Product Price Update Alert!" };
+                        case "LIGHT_DOWN": return { text: "The price dropped slightly.", title: "Price Dropped! 🔻" };
+                        case "STRONG_DOWN": return { text: "The price dropped significantly.", title: "Price Dropped Significantly! 🔻" };
+                        default: return { text: "No data available.", title: "Product Price Update Alert!" };
+                    }
+                };
+
+                // ✅ TREND — based on full price history span, not a single comparison
+                const getTrend = (priceHistory) => {
+                    if (!priceHistory || priceHistory.length < 2) return "stable";
+                    const oldest = priceHistory[priceHistory.length - 1].price;
+                    const newest = priceHistory[0].price;
+                    const overallPercent = ((newest - oldest) / oldest) * 100;
+                    if (overallPercent > 2) return "rising";
+                    if (overallPercent < -2) return "falling";
+                    return "stable";
+                };
+
+                let currentStatusText = "No data available";
+                let title = "Product Price Update Alert!";
+                let priceChangePercent = null;
+                let priceChangeCategory = null;
+
+                if (currentPrice && previousPrice) {
+                    priceChangePercent = ((currentPrice - previousPrice) / previousPrice) * 100;
+                    priceChangeCategory = getPriceChangeCategory(priceChangePercent);
+
+                    const meta = getCategoryMeta(priceChangeCategory);
+                    currentStatusText = meta.text;
+                    title = meta.title;
+                }
+
+                const trend = getTrend(priceHistory);
 
                 // 🔹 Update product fields
                 product.product.price = newPrice;
                 product.product.lowestPrice = lowestPrice;
                 product.product.previousPrice = previousPrice;
                 product.product.currentStatusText = currentStatusText;
+                product.product.priceChangePercent = priceChangePercent
+                    ? parseFloat(priceChangePercent.toFixed(2))
+                    : null;
+                product.product.priceChangeCategory = priceChangeCategory;
+                product.product.trend = trend;
 
                 await product.save();
 
@@ -539,6 +604,9 @@ cron.schedule('0 0 0,12 * * *', async () => {
                     price: newPrice,
                     previousPrice,
                     lowestPrice,
+                    priceChangePercent: product.product.priceChangePercent,
+                    priceChangeCategory,
+                    trend,
                     date: realDate
                 });
             }
@@ -559,7 +627,6 @@ cron.schedule('0 0 0,12 * * *', async () => {
 
 // ─── Helper: wait N milliseconds ───────────────────────────────
 
-
 function priceChangedInLast7Days(priceHistory) {
     if (!Array.isArray(priceHistory) || priceHistory.length < 2) return false;
 
@@ -574,98 +641,89 @@ function priceChangedInLast7Days(priceHistory) {
     const firstPrice = prices[0];
     return prices.some(price => price !== firstPrice);
 }
+cron.schedule('0 0 0,12 * * *', async () => {
+    console.log("Checking products for 7-day price inactivity...");
 
-cron.schedule('0 0 0,12 * * *',
-    // cron.schedule('*/20 * * * * *',
+    try {
+        const products = await Product.find({ isDelete: false, isPurchased: false });
 
-    async () => {
-        console.log("Checking products for 7-day price inactivity...");
+        for (const product of products) {
+            try {
+                const priceHistory = product.product?.priceHistory || [];
+                const existingAlternates = product.alternativeProducts || [];
+                const asin = product.product?.asin;
+                const brand = product.product?.brand;  // ✅ was using 'title' as brand — fixed
 
-        try {
-            const products = await Product.find({ isDelete: false, isPurchased: false });
-
-            for (const product of products) {
-                try {
-                    const priceHistory = product.product?.priceHistory || [];
-                    const existingAlternates = product.alternativeProducts || [];
-                    product.alternativeProducts = existingAlternates;
-                    if (product.alternativeProducts.length >= 0) {
-                        console.log(`ASIN ${product.product?.asin} — already has ${product.alternativeProducts.length} alternates, skipping`);
-                        continue;
-                    }
-
-                    // ─── Condition 1: Skip if price changed in last 7 days ──────
-                    if (priceChangedInLast7Days(priceHistory)) {
-                        console.log(`ASIN ${product.product?.asin} — price changed recently, skipping`);
-                        continue;
-                    }
-
-                    // ─── Condition 2: Skip if already has 3 or more alternates ──
-                    if (existingAlternates.length >= 3) {
-                        console.log(`ASIN ${product.product?.asin} — already has ${existingAlternates.length} alternates, skipping`);
-                        continue;
-                    }
-
-                    const { asin, title: brand } = product.product || {};
-
-                    // ─── Condition 3: Skip if missing ASIN or brand ─────────────
-                    if (!asin) {
-                        console.warn(`Skipping product ID ${product._id} — missing ASIN`);
-                        continue;
-                    }
-
-                    if (!brand) {
-                        console.warn(`Skipping ASIN ${asin} — missing brand`);
-                        continue;
-                    }
-
-                    // ─── Wait before each Keepa API call ───────────────────────
-                    // refillRate: 1 token per ~200ms — 20s gap is safe
-                    console.log(`Waiting 10s before Keepa API call for ASIN: ${asin}...`);
-                    await sleep(10000);
-
-                    // ─── Fetch alternates by brand ──────────────────────────────
-                    const stillNeeded = 3 - existingAlternates.length;
-                    const searchTerm = brand.slice(0, 35);
-                    const alternates = await savenDayKeepa.getAlternateProductsByCategory(asin, searchTerm, stillNeeded);
-
-                    // console.log("all products:", alternates);
-
-                    if (!alternates.length) {
-                        console.warn(`No alternates found for ASIN: ${asin}`);
-                        continue;
-                    }
-
-                    console.log(`Fetched ${alternates.length} alternates:`, alternates.map(a => a.asin));
-
-                    // ─── Condition 4: Skip already existing ASINs ───────────────
-                    const existingAsinSet = new Set(existingAlternates.map(a => a.asin));
-                    const newAlternates = alternates.filter(alt => !existingAsinSet.has(alt.asin));
-
-                    if (!newAlternates.length) {
-                        console.log(`No new alternates to add for ASIN: ${asin} — all already exist`);
-                        continue;
-                    }
-
-                    // ─── Save only new alternates to DB ────────────────────────
-                    await Product.findByIdAndUpdate(
-                        product._id,
-                        { $push: { alternativeProducts: { $each: newAlternates } } }
-                    );
-
-                    console.log(`✅ Added ${newAlternates.length} new alternates for ASIN: ${asin}`);
-
-                } catch (productErr) {
-                    console.error(`Error processing product ID ${product._id}:`, productErr.message);
+                // ─── Condition 1: Skip if missing ASIN ─────────────────────
+                if (!asin) {
+                    console.warn(`Skipping product ID ${product._id} — missing ASIN`);
+                    continue;
                 }
+
+                // ─── Condition 2: Skip if already has 3 or more alternates ─
+                // ✅ Was: >= 0 (ALWAYS true, skipped everything — critical bug)
+                if (existingAlternates.length >= 3) {
+                    console.log(`ASIN ${asin} — already has ${existingAlternates.length} alternates, skipping`);
+                    continue;
+                }
+
+                // ─── Condition 3: Skip if price changed in last 7 days ─────
+                if (priceChangedInLast7Days(priceHistory)) {
+                    console.log(`ASIN ${asin} — price changed recently, skipping`);
+                    continue;
+                }
+
+                // ─── Condition 4: Skip if missing brand ────────────────────
+                if (!brand) {
+                    console.warn(`Skipping ASIN ${asin} — missing brand`);
+                    continue;
+                }
+
+                // ─── Wait before each Keepa API call ───────────────────────
+                console.log(`Waiting 10s before Keepa API call for ASIN: ${asin}...`);
+                await sleep(10000);
+
+                // ─── Fetch alternates ───────────────────────────────────────
+                const stillNeeded = 3 - existingAlternates.length;
+                const searchTerm = brand.slice(0, 35);
+                const alternates = await savenDayKeepa.getAlternateProductsByCategory(asin, searchTerm, stillNeeded);
+
+                if (!alternates.length) {
+                    console.warn(`No alternates found for ASIN: ${asin}`);
+                    continue;
+                }
+
+                console.log(`Fetched ${alternates.length} alternates:`, alternates.map(a => a.asin));
+
+                // ─── Condition 5: Filter out already existing ASINs ─────────
+                const existingAsinSet = new Set(existingAlternates.map(a => a.asin));
+                const newAlternates = alternates.filter(alt => !existingAsinSet.has(alt.asin));
+
+                if (!newAlternates.length) {
+                    console.log(`No new alternates to add for ASIN: ${asin} — all already exist`);
+                    continue;
+                }
+
+                // ─── Save new alternates to DB ──────────────────────────────
+                await Product.findByIdAndUpdate(
+                    product._id,
+                    { $push: { alternativeProducts: { $each: newAlternates } } }
+                );
+
+                console.log(`✅ Added ${newAlternates.length} new alternates for ASIN: ${asin}`);
+
+            } catch (productErr) {
+                console.error(`Error processing product ID ${product._id}:`, productErr.message);
             }
-
-            console.log("✅ 7-day alternate check completed.");
-
-        } catch (err) {
-            console.error("Cron job failed:", err);
         }
-    }, { timezone: 'Asia/Dhaka' });
+
+        console.log("✅ 7-day alternate check completed.");
+
+    } catch (err) {
+        console.error("Cron job failed:", err);
+    }
+
+}, { timezone: 'Asia/Dhaka' });
 
 /* -------------------------------------------------------------------------- */
 /*        Remove product after 30 days if price not changed (auto clean)     */
