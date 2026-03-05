@@ -126,24 +126,25 @@ const createProduct = async ({ productUrl, userId }) => {
 
     // Helper: classify a % change into a named category
     const getPriceChangeCategory = (percent) => {
-        if (percent > 10) return "STRONG_UP";
-        if (percent > 2 && percent <= 10) return "LIGHT_UP";
-        if (percent >= -2 && percent <= 2) return "STABLE";
-        if (percent < -2 && percent >= -10) return "LIGHT_DOWN";
-        if (percent < -10) return "STRONG_DOWN";
+        if (percent >= 10) return "STRONG_UP";    // ≥ +10%
+        if (percent > 2 && percent < 10) return "LIGHT_UP";     // > +2% to < +10%
+        if (percent >= -2 && percent <= 2) return "STABLE";       // -2% to +2%
+        if (percent < -2 && percent > -10) return "LIGHT_DOWN";   // < -2% to > -10%
+        if (percent <= -10) return "STRONG_DOWN";  // ≤ -10%
     };
 
     // Helper: human-readable text + alert title per category
     const getCategoryMeta = (category) => {
         switch (category) {
-            case "STRONG_UP": return { text: "The price increased significantly.", title: "Price Surged! 🔺" };
-            case "LIGHT_UP": return { text: "The price increased slightly.", title: "Price Increased 🔺" };
+            case "STRONG_UP": return { text: "The price increased Strongly.", title: "Price Surged! 🔺" };
+            case "LIGHT_UP": return { text: "The price increased Significantly.", title: "Price Increased 🔺" };
             case "STABLE": return { text: "The price is stable.", title: "Product Price Update Alert!" };
-            case "LIGHT_DOWN": return { text: "The price dropped slightly.", title: "Price Dropped! 🔻" };
-            case "STRONG_DOWN": return { text: "The price dropped significantly.", title: "Price Dropped Significantly! 🔻" };
+            case "LIGHT_DOWN": return { text: "The price dropped Significantly.", title: "Price Dropped! 🔻" };
+            case "STRONG_DOWN": return { text: "The price dropped Strongly.", title: "Price Dropped Significantly! 🔻" };
             default: return { text: "No data available.", title: "Product Price Update Alert!" };
         }
     };
+
 
     let priceChangePercent = null;
     let priceChangeCategory = null;
@@ -525,39 +526,41 @@ cron.schedule('0 0 0,12 * * *', async () => {
                 const priceHistory = product.product.priceHistory;
                 const currentPrice = newPrice;
 
+                // ✅ Lowest price across history
                 const lowestPrice = priceHistory.length
                     ? Math.min(...priceHistory.map(p => p.price))
                     : currentPrice;
 
-                // ✅ previousPrice = index 1, because index 0 is the new price we just unshifted
+                // ✅ previousPrice = index 1 (index 0 is the new price we just unshifted)
                 const previousPrice = priceHistory.length > 1
                     ? priceHistory[1].price
                     : currentPrice;
 
-                // ─────────────────────────────────────────────────────
+                // ─────────────────────────────────────────────────────────────
                 // ✅ PERCENTAGE CALCULATION
                 // Formula: ((currentPrice - previousPrice) / previousPrice) * 100
-                // ─────────────────────────────────────────────────────
+                // ─────────────────────────────────────────────────────────────
                 const getPriceChangeCategory = (percent) => {
-                    if (percent > 10) return "STRONG_UP";
-                    if (percent > 2 && percent <= 10) return "LIGHT_UP";
-                    if (percent >= -2 && percent <= 2) return "STABLE";
-                    if (percent < -2 && percent >= -10) return "LIGHT_DOWN";
-                    if (percent < -10) return "STRONG_DOWN";
+                    if (percent >= 10) return "STRONG_UP";    // ≥ +10%
+                    if (percent > 2 && percent < 10) return "LIGHT_UP";     // > +2% to < +10%
+                    if (percent >= -2 && percent <= 2) return "STABLE";       // -2% to +2%
+                    if (percent < -2 && percent > -10) return "LIGHT_DOWN";   // < -2% to > -10%
+                    if (percent <= -10) return "STRONG_DOWN";  // ≤ -10%
                 };
 
                 const getCategoryMeta = (category) => {
                     switch (category) {
-                        case "STRONG_UP": return { text: "The price increased significantly.", title: "Price Surged! 🔺" };
-                        case "LIGHT_UP": return { text: "The price increased slightly.", title: "Price Increased 🔺" };
+                        case "STRONG_UP": return { text: "The price increased  Strongly.", title: "Price Surged! 🔺" };
+                        case "LIGHT_UP": return { text: "The price increased Significantly.", title: "Price Increased 🔺" };
                         case "STABLE": return { text: "The price is stable.", title: "Product Price Update Alert!" };
-                        case "LIGHT_DOWN": return { text: "The price dropped slightly.", title: "Price Dropped! 🔻" };
-                        case "STRONG_DOWN": return { text: "The price dropped significantly.", title: "Price Dropped Significantly! 🔻" };
+                        case "LIGHT_DOWN": return { text: "The price dropped Significantly.", title: "Price Dropped! 🔻" };
+                        case "STRONG_DOWN": return { text: "The price dropped Strongly.", title: "Price Dropped Significantly! 🔻" };
                         default: return { text: "No data available.", title: "Product Price Update Alert!" };
                     }
                 };
 
-                // ✅ TREND — based on full price history span, not a single comparison
+
+                // ✅ TREND — based on full price history span, not a single point
                 const getTrend = (priceHistory) => {
                     if (!priceHistory || priceHistory.length < 2) return "stable";
                     const oldest = priceHistory[priceHistory.length - 1].price;
@@ -569,6 +572,7 @@ cron.schedule('0 0 0,12 * * *', async () => {
                 };
 
                 let currentStatusText = "No data available";
+                let currentStatusTextDe = "Keine Daten verfügbar";
                 let title = "Product Price Update Alert!";
                 let priceChangePercent = null;
                 let priceChangeCategory = null;
@@ -578,17 +582,19 @@ cron.schedule('0 0 0,12 * * *', async () => {
                     priceChangeCategory = getPriceChangeCategory(priceChangePercent);
 
                     const meta = getCategoryMeta(priceChangeCategory);
-                    currentStatusText = meta.text;
+                    currentStatusText = meta.text_en;
+                    currentStatusTextDe = meta.text_de;
                     title = meta.title;
                 }
 
                 const trend = getTrend(priceHistory);
 
-                // 🔹 Update product fields
+                // 🔹 Always save updated product fields to DB
                 product.product.price = newPrice;
                 product.product.lowestPrice = lowestPrice;
                 product.product.previousPrice = previousPrice;
                 product.product.currentStatusText = currentStatusText;
+                product.product.currentStatusTextDe = currentStatusTextDe;
                 product.product.priceChangePercent = priceChangePercent
                     ? parseFloat(priceChangePercent.toFixed(2))
                     : null;
@@ -597,18 +603,33 @@ cron.schedule('0 0 0,12 * * *', async () => {
 
                 await product.save();
 
-                // 🔹 Send push notification
-                await sendPushNotification({
-                    fcmToken: product.userId.fcmToken,
-                    title,
-                    price: newPrice,
-                    previousPrice,
-                    lowestPrice,
-                    priceChangePercent: product.product.priceChangePercent,
-                    priceChangeCategory,
-                    trend,
-                    date: realDate
-                });
+                // ─────────────────────────────────────────────────────────────
+                // ✅ NOTIFICATION GATE
+                // Only notify if BOTH conditions are true:
+                //   1. Price change is outside the ±2% stable range
+                //   2. Absolute price difference is more than €1
+                // ─────────────────────────────────────────────────────────────
+                const priceDiffEuro = Math.abs(currentPrice - previousPrice);
+                const isNotStable = priceChangeCategory !== "STABLE";  // outside ±2%
+                const isOver1Euro = priceDiffEuro > 1;                 // more than €1
+
+                if (isNotStable && isOver1Euro) {
+                    console.log(`📢 Sending notification — ASIN: ${product.product.asin} | ${priceChangeCategory} | Δ€${priceDiffEuro.toFixed(2)} | ${priceChangePercent?.toFixed(2)}%`);
+
+                    await sendPushNotification({
+                        fcmToken: product.userId.fcmToken,
+                        title,
+                        price: newPrice,
+                        previousPrice,
+                        lowestPrice,
+                        priceChangePercent: product.product.priceChangePercent,
+                        priceChangeCategory,
+                        trend,
+                        date: realDate
+                    });
+                } else {
+                    console.log(`🔕 Skipping notification — ASIN: ${product.product.asin} | ${priceChangeCategory} | Δ€${priceDiffEuro.toFixed(2)} (below threshold)`);
+                }
             }
         }
 
@@ -619,7 +640,6 @@ cron.schedule('0 0 0,12 * * *', async () => {
     }
 
 }, { timezone: 'Asia/Dhaka' });
-
 
 /* -------------------------------------------------------------------------- */
 /*         Last 7 day if price not changed then add more alternate 3 products       */
@@ -641,6 +661,7 @@ function priceChangedInLast7Days(priceHistory) {
     const firstPrice = prices[0];
     return prices.some(price => price !== firstPrice);
 }
+
 cron.schedule('0 0 0,12 * * *', async () => {
     console.log("Checking products for 7-day price inactivity...");
 
