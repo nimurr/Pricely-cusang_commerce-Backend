@@ -1,7 +1,6 @@
 # Dependencies
 node_modules
 
-.env
 
 # yarn error logs
 yarn-error.log
@@ -16,3 +15,4 @@ app.log*
 
 /public
 /dist
+config.bat
